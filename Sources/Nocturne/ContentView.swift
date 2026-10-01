@@ -10,8 +10,8 @@ extension Style {
     }
 }
 
-/// Transport, knobs and recording on the left; progression, faders, pads and keyboard on
-/// the right. The window's title and the shortcuts help live in the native toolbar.
+/// Transport, knobs and recording on the left; progression, keyboard and mixer on the
+/// right. The window's title and the shortcuts help live in the native toolbar.
 struct ContentView: View {
     @Bindable var groove: Groove
     @State private var showShortcuts = false
@@ -29,12 +29,9 @@ struct ContentView: View {
 
                 VStack(spacing: 14) {
                     ProgressionPanel(groove: groove)
-                    HStack(spacing: 14) {
-                        FaderPanel(groove: groove)
-                        PadPanel(groove: groove)
-                    }
-                    .frame(height: 300)
                     PianoPanel(groove: groove)
+                    FaderPanel(groove: groove)
+                        .frame(height: 230)
                 }
                 .frame(maxHeight: .infinity)
             }

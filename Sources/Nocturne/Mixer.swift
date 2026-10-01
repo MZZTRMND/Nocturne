@@ -6,7 +6,7 @@ struct FaderPanel: View {
     @Bindable var groove: Groove
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             ForEach($groove.tracks) { $track in
                 ChannelStrip(track: $track,
                              name: groove.trackName(track.id),
@@ -14,7 +14,7 @@ struct FaderPanel: View {
                              accent: groove.style.accent)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxHeight: .infinity)
         .glassEffect(.regular, in: .rect(cornerRadius: 30))
@@ -54,12 +54,13 @@ private struct ChannelStrip: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: track.muted ? "Unmute" : "Mute") { track.muted.toggle() }
         }
-        .frame(minWidth: 58)
+        .frame(maxWidth: .infinity)
     }
 }
 
-/// A hardware-style fader: slot, coloured fill up to a glass cap, and a live level meter
-/// beside it. Drag anywhere on it; double-click to reset to 80%.
+/// A hardware-style fader: a slot whose dim fill rises to the glass cap, with the live
+/// level glowing inside that fill (so the meter never goes above the fader setting).
+/// Drag anywhere on it; double-click to reset to 80%.
 struct Fader: View {
     @Binding var value: Double
     let level: Double
@@ -73,13 +74,13 @@ struct Fader: View {
         GeometryReader { geo in
             let travel = max(geo.size.height - capHeight, 1)
             ZStack(alignment: .bottom) {
-                Capsule().fill(.black.opacity(0.35)).frame(width: 6)
-                Capsule().fill(accent).frame(width: 6, height: capHeight / 2 + travel * value)
-                // Level meter to the right of the slot.
+                let fill = capHeight / 2 + travel * value
+                Capsule().fill(.black.opacity(0.35)).frame(width: 8)
+                Capsule().fill(accent.opacity(0.35)).frame(width: 8, height: fill)
                 Capsule()
-                    .fill(accent.opacity(0.85))
-                    .frame(width: 3, height: geo.size.height * min(level, 1))
-                    .offset(x: 13)
+                    .fill(accent)
+                    .frame(width: 8, height: fill * min(level, 1))
+                    .shadow(color: accent.opacity(0.8 * level), radius: 4)
                 Color.clear
                     .frame(width: 34, height: capHeight)
                     .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 7))

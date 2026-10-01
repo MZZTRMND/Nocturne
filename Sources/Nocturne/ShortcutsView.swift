@@ -54,11 +54,6 @@ struct ShortcutsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            section("Pads") {
-                Text("Z X C V · B N M , · 5 6 7 8 · 1 2 3 4 — bottom row to top.")
-                    .foregroundStyle(.secondary)
-            }
-
             section("Faders") {
                 Text("Drag to set a track's level. Double-click resets it. Click a track's name to mute it.")
                     .foregroundStyle(.secondary)
