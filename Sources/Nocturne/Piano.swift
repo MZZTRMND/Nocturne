@@ -28,7 +28,7 @@ struct PianoPanel: View {
                           accent: groove.style.accent,
                           down: press,
                           up: release)
-                .frame(minHeight: 150, maxHeight: .infinity)
+                .frame(minHeight: 230, maxHeight: .infinity)
         }
         .padding(16)
         .frame(maxHeight: .infinity)

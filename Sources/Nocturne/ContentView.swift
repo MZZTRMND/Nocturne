@@ -31,7 +31,7 @@ struct ContentView: View {
                     ProgressionPanel(groove: groove)
                     PianoPanel(groove: groove)
                     FaderPanel(groove: groove)
-                        .frame(height: 230)
+                        .frame(height: 170)
                 }
                 .frame(maxHeight: .infinity)
             }

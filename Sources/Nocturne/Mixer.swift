@@ -1,23 +1,23 @@
 import SwiftUI
 
-/// Channel strips with vertical faders, one per track. Click a channel's name or icon
+/// One glass card per track, each with a vertical fader. Click a channel's name or icon
 /// to mute it.
 struct FaderPanel: View {
     @Bindable var groove: Groove
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 12) {
             ForEach($groove.tracks) { $track in
                 ChannelStrip(track: $track,
                              name: groove.trackName(track.id),
                              level: groove.levels[track.id],
                              accent: groove.style.accent)
+                    .padding(.vertical, 14)
+                    .frame(maxHeight: .infinity)
+                    .glassEffect(.regular.tint(track.muted ? .clear : groove.style.accent.opacity(0.04 + 0.12 * groove.levels[track.id])),
+                                 in: .rect(cornerRadius: 24))
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .frame(maxHeight: .infinity)
-        .glassEffect(.regular, in: .rect(cornerRadius: 30))
     }
 }
 
@@ -99,7 +99,7 @@ struct Fader: View {
             )
             .onTapGesture(count: 2) { withAnimation(.smooth) { value = 0.8 } }
         }
-        .frame(minHeight: 120)
+        .frame(minHeight: 80)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(name) volume")
         .accessibilityValue("\(Int((value * 100).rounded())) percent")
