@@ -53,7 +53,7 @@ struct Kick {
         case .tripHop: f = 44 + 130 * expf(-t * 26); a = expf(-t * 4)
         case .industrial: f = 40 + 190 * expf(-t * 38); a = expf(-t * 3.8)
         case .dreamy: f = 46 + 110 * expf(-t * 28); a = expf(-t * 5)
-        case .cinematic: f = 45 + 70 * expf(-t * 25); a = expf(-t * 6)
+        case .synth: f = 45 + 70 * expf(-t * 25); a = expf(-t * 6)
         }
         ph += f * dt; wrap(&ph)
         let body = sinf(twoPi * ph) * a
@@ -63,7 +63,7 @@ struct Kick {
         case .tripHop: out = tanhf(body * 2.4) + click * 0.6
         case .industrial: out = tanhf(body * 4) * 0.8 + click
         case .dreamy: out = tanhf(body * 1.8) * 0.85 + click * 0.3     // round, soft beater
-        case .cinematic: out = tanhf(body * 1.5) * 0.8 + click * 0.2     // muffled, felt-covered
+        case .synth: out = tanhf(body * 1.5) * 0.8 + click * 0.2     // muffled, felt-covered
         }
         t += dt
         return out * vel
@@ -79,7 +79,7 @@ struct Snare {
         case .tripHop: bp.set(1500, k: 0.8, sr: sr)
         case .industrial: bp.set(1300, k: 0.6, sr: sr)
         case .dreamy: bp.set(1500, k: 0.9, sr: sr)
-        case .cinematic: bp.set(2500, k: 0.7, sr: sr)
+        case .synth: bp.set(2500, k: 0.7, sr: sr)
         }
     }
 
@@ -98,7 +98,7 @@ struct Snare {
         case .dreamy:       // soft, dusty snare
             ph += 190 * dt
             out = (sinf(twoPi * ph) * expf(-t * 25) * 0.5 + nz * expf(-t * 16) * 1.4) * 0.7
-        case .cinematic:    // short, crunchy gated noise burst
+        case .synth:    // short, crunchy gated noise burst
             out = tanhf(nz * 3 * expf(-t * 20)) * 0.5
         }
         wrap(&ph)
@@ -137,7 +137,7 @@ struct Perc {
     mutating func next(_ s: Style, _ dt: Float, _ n: Float) -> Float {
         guard t < 1.5 else { return 0 }
         var out: Float
-        if s == .cinematic {     // digital glitch blip
+        if s == .synth {     // digital glitch blip
             pc += 1800 * dt; wrap(&pc)
             out = (pc < 0.5 ? 1 : -1) * expf(-t * 90) * 0.4
         } else if s == .industrial {
@@ -206,7 +206,7 @@ struct LineBass {
         case .dreamy:       // triangle/saw blend, gently filtered, decaying like a pluck
             lp.set(500 + 1800 * expf(-t * 7), k: 0.9, sr: sr)
             out = lp.tick(0.6 * (4 * abs(ph - 0.5) - 1) + 0.4 * (2 * ph - 1)).lp * 0.6 * expf(-t * 2.5)
-        case .cinematic:    // staccato analog pulse: saw + square through a resonant lowpass
+        case .synth:    // staccato analog pulse: saw + square through a resonant lowpass
             lp.set(300 + 1500 * expf(-t * 12), k: 0.35, sr: sr)
             out = tanhf(lp.tick(0.5 * (2 * ph - 1) + 0.5 * (ph < 0.5 ? 1 : -1)).lp * 1.8) * 0.45
         }
@@ -238,7 +238,7 @@ struct Key {
             wrap(&pc); wrap(&pm); wrap(&p2)
             amp = min(1, t / attack)
             out = ((2 * pc - 1) + (2 * pm - 1)) * 0.35 + (4 * abs(p2 - 0.5) - 1) * 0.5
-        case .cinematic:    // felt piano: three partials, the upper ones dying away first
+        case .synth:    // felt piano: three partials, the upper ones dying away first
             pc += f * dt; p2 += 2 * f * dt; pm += 3 * f * dt
             wrap(&pc); wrap(&p2); wrap(&pm)
             out = sinf(twoPi * pc) + sinf(twoPi * p2) * 0.5 * expf(-t * 3) + sinf(twoPi * pm) * 0.25 * expf(-t * 6)
@@ -252,7 +252,7 @@ struct Key {
         }
         t += dt
         let a = amp * relEnv * vel
-        if relEnv < 0.0005 || ((s == .tripHop || s == .cinematic) && t > 0.1 && a < 0.00005) { on = false }
+        if relEnv < 0.0005 || ((s == .tripHop || s == .synth) && t > 0.1 && a < 0.00005) { on = false }
         return out * a
     }
 }
@@ -367,7 +367,7 @@ final class Synth {
         case .tripHop: keysL.set(1400, k: 0.9, sr: sr)
         case .industrial: keysL.set(300 + 1800 * sweep, k: 0.3, sr: sr)
         case .dreamy: keysL.set(1100 + 700 * sweep, k: 0.8, sr: sr)
-        case .cinematic: keysL.set(2400, k: 0.9, sr: sr)
+        case .synth: keysL.set(2400, k: 0.9, sr: sr)
         }
         keysR.g = keysL.g; keysR.k = keysL.k
         droneBP.set(220 + 900 * sweep, k: 0.15, sr: sr)
@@ -405,7 +405,7 @@ final class Synth {
 
             // Sub + bass line
             let b = bass.next(dt, atk: atk, rel: rel) * 0.42 * [1, 1, 1, 0.5][style.rawValue] * smoothGains[1] * duck
-            let ln = line.next(style, dt, sr: sr, atk: atk, rel: rel, pitch: pitch) * 0.4 * [1, 1, 1, 1.8][style.rawValue] * smoothGains[2] * duck
+            let ln = line.next(style, dt, sr: sr, atk: atk, rel: rel, pitch: pitch) * 0.4 * [1, 1, 2.7, 1.8][style.rawValue] * smoothGains[2] * duck
 
             // Keys: the pattern's chords plus anything played live
             var kL: Float = 0, kR: Float = 0
@@ -426,7 +426,7 @@ final class Synth {
                 kL *= 1 - 0.25 * (0.5 + 0.5 * tr)
                 kR *= 1 - 0.25 * (0.5 - 0.5 * tr)
             }
-            let kScale: Float = [1, 1, 1.4, 3.2][style.rawValue]
+            let kScale: Float = [2.9, 1, 2.8, 3.2][style.rawValue]
             kL *= smoothGains[3] * duck * kScale
             kR *= smoothGains[3] * duck * kScale
 
@@ -437,7 +437,7 @@ final class Synth {
                 droneF += (droneTarget - droneF) * 0.0005
                 dronePh += droneF * dt; wrap(&dronePh)
                 tx = droneBP.tick(noise.next()).bp * 0.06 + rumbleLP.tick(2 * dronePh - 1).lp * 0.22
-            case .cinematic:    // static and crackle over a saturated drone on the root
+            case .synth:    // static and crackle over a saturated drone on the root
                 if noise.next() > 0.9995 { crackle = 0.2 + 0.2 * noise.next() }
                 crackle *= 0.6
                 droneF += (droneTarget - droneF) * 0.0005
@@ -454,7 +454,7 @@ final class Synth {
                 let drone = rumbleLP.tick(2 * dronePh - 1).lp * 0.12 + droneBP.tick(noise.next()).bp * 0.025
                 tx = crackle * noise.next() + hissLP.tick(noise.next()).lp * 0.02 + drone
             }
-            tx *= smoothGains[4] * (style == .cinematic ? 0.5 : 1)
+            tx *= smoothGains[4] * (style == .synth ? 0.5 : 1)
 
             lfoSlow += 0.06 * dt; wrap(&lfoSlow)
             lfoTrem += 4.2 * dt; wrap(&lfoTrem)

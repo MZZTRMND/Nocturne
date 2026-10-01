@@ -9,7 +9,7 @@ struct ShortcutsView: View {
         (["⌘", "1"], "Trip-Hop"),
         (["⌘", "2"], "Industrial"),
         (["⌘", "3"], "Dreamy"),
-        (["⌘", "4"], "Cinematic"),
+        (["⌘", "4"], "Synth"),
         (["⌘", "/"], "Show this help"),
     ]
 

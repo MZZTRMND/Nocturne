@@ -6,7 +6,7 @@ extension Style {
         case .tripHop: Color(red: 1.0, green: 0.62, blue: 0.28)
         case .industrial: Color(red: 0.96, green: 0.34, blue: 0.34)
         case .dreamy: Color(red: 0.25, green: 0.6, blue: 1.0)
-        case .cinematic: Color(red: 0.35, green: 0.85, blue: 0.72)
+        case .synth: Color(red: 0.35, green: 0.85, blue: 0.72)
         }
     }
 }
@@ -51,7 +51,9 @@ struct ContentView: View {
                     .padding(.leading, 4)
             }
             .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .primaryAction) {
+            // Without the system title nothing pushes the buttons right; this does.
+            ToolbarSpacer(.flexible)
+            ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     groove.muteAll.toggle()
                 } label: {
@@ -61,8 +63,6 @@ struct ContentView: View {
                 .keyboardShortcut("m", modifiers: [.command, .shift])
                 .help(groove.muteAll ? "Unmute all (⇧⌘M)" : "Mute all (⇧⌘M)")
                 .accessibilityLabel(groove.muteAll ? "Unmute all" : "Mute all")
-            }
-            ToolbarItem(placement: .primaryAction) {
                 Button {
                     showShortcuts.toggle()
                 } label: {

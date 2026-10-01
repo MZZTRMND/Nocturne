@@ -38,10 +38,10 @@ private struct ChannelStrip: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .foregroundStyle(track.muted ? .secondary : .primary)
-                Text("Muted")
-                    .font(.system(size: 9, weight: .semibold))
+                Text(track.muted ? "Muted" : "\(Int((track.volume * 100).rounded()))%")
+                    .font(.caption2.weight(.medium).monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .opacity(track.muted ? 1 : 0)       // keeps its space so the fader doesn't jump
+                    .contentTransition(.numericText())
             }
             .frame(maxWidth: .infinity)
             .contentShape(.rect)

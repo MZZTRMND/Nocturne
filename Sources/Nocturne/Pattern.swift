@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Style
 
 enum Style: Int, CaseIterable, Identifiable {
-    case tripHop, industrial, dreamy, cinematic
+    case tripHop, industrial, dreamy, synth
 
     var id: Int { rawValue }
 
@@ -12,7 +12,7 @@ enum Style: Int, CaseIterable, Identifiable {
         case .tripHop: "Trip-Hop"
         case .industrial: "Industrial"
         case .dreamy: "Dreamy"
-        case .cinematic: "Cinematic"
+        case .synth: "Synth"
         }
     }
 
@@ -27,7 +27,7 @@ enum Style: Int, CaseIterable, Identifiable {
         case .tripHop: Defaults(bpm: 80, swing: 0.2, tone: 0.42, grit: 0.3, space: 0.55)
         case .industrial: Defaults(bpm: 116, swing: 0.0, tone: 0.7, grit: 0.55, space: 0.35)
         case .dreamy: Defaults(bpm: 104, swing: 0.12, tone: 0.55, grit: 0.12, space: 0.65)
-        case .cinematic: Defaults(bpm: 96, swing: 0, tone: 0.5, grit: 0.35, space: 0.5)
+        case .synth: Defaults(bpm: 96, swing: 0, tone: 0.5, grit: 0.35, space: 0.5)
         }
     }
 
@@ -36,7 +36,7 @@ enum Style: Int, CaseIterable, Identifiable {
         case .tripHop: ["Drums", "Sub", "Bass", "Rhodes", "Haze"]
         case .industrial: ["Machine", "Sub", "Grind", "Pad", "Drone"]
         case .dreamy: ["Drums", "Sub", "Arp", "Pad", "Tape"]
-        case .cinematic: ["Drums", "Drone", "Pulse", "Piano", "Static"]
+        case .synth: ["Drums", "Drone", "Pulse", "Piano", "Static"]
         }
     }
 }
@@ -96,7 +96,7 @@ private func progressions(_ style: Style) -> [[(Int, Quality)]] {
         [(0, .flat2), (0, .five), (5, .tritone), (1, .five)],
     ]
     // Minimal and bruised: C minor sitting on A♭ and E♭, open fifths on B♭.
-    case .cinematic: [
+    case .synth: [
         [(0, .m7), (0, .m7), (8, .maj7), (8, .maj7)],
         [(0, .five), (8, .maj7), (3, .maj7), (10, .five)],
         [(0, .m7), (5, .m7), (8, .maj7), (7, .five)],
@@ -171,7 +171,7 @@ struct Pattern {
         case .tripHop: p.writeTripHop(&r)
         case .industrial: p.writeIndustrial(&r)
         case .dreamy: p.writeDreamy(&r)
-        case .cinematic: p.writeCinematic(&r)
+        case .synth: p.writeSynth(&r)
         }
         return p
     }
@@ -276,7 +276,7 @@ struct Pattern {
     /// Score-like and restrained, after the Social Network soundtrack: a sparse felt-piano
     /// melody over soft chords, a long saturated drone, a driving 16th-note analog pulse
     /// and minimal, glitchy percussion.
-    private mutating func writeCinematic(_ r: inout RNG) {
+    private mutating func writeSynth(_ r: inout RNG) {
         let pulse = r.pick([[0, 0, 12, 0, 7, 0, 12, 0, 0, 0, 12, 0, 7, 0, 10, 0],
                             [0, 12, 0, 7, 0, 12, 0, 7, 0, 12, 0, 7, 0, 12, 3, 7],
                             [0, 7, 12, 7, 0, 7, 12, 7, 0, 7, 12, 15, 12, 7, 0, 7]])
