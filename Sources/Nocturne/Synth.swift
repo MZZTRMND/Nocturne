@@ -50,7 +50,7 @@ struct Kick {
         // and a few ms of noise on top is the beater click.
         let f, a: Float
         switch s {
-        case .tripHop: f = 48 + 150 * expf(-t * 30); a = expf(-t * 5.5)
+        case .tripHop: f = 44 + 130 * expf(-t * 26); a = expf(-t * 4)
         case .industrial: f = 40 + 190 * expf(-t * 38); a = expf(-t * 3.8)
         case .techno: f = 46 + 110 * expf(-t * 28); a = expf(-t * 5)
         }
@@ -59,7 +59,7 @@ struct Kick {
         let click = t < 0.004 ? n * (1 - t / 0.004) * 0.45 : 0
         let out: Float
         switch s {
-        case .tripHop: out = tanhf(body * 2.2) + click
+        case .tripHop: out = tanhf(body * 2.4) + click * 0.6
         case .industrial: out = tanhf(body * 4) * 0.8 + click
         case .techno: out = tanhf(body * 1.8) * 0.85 + click * 0.3     // round, soft beater
         }
@@ -74,7 +74,7 @@ struct Snare {
     mutating func trigger(_ v: Float, _ s: Style, sr: Float) {
         t = 0; vel = v; ph = 0
         switch s {
-        case .tripHop: bp.set(1900, k: 0.8, sr: sr)
+        case .tripHop: bp.set(1500, k: 0.8, sr: sr)
         case .industrial: bp.set(1300, k: 0.6, sr: sr)
         case .techno: bp.set(1500, k: 0.9, sr: sr)
         }
@@ -85,9 +85,9 @@ struct Snare {
         let nz = bp.tick(n).bp
         var out: Float
         switch s {
-        case .tripHop:      // fat body with a little pitch drop, crisp noise, gently clipped
-            ph += (165 + 60 * expf(-t * 40)) * dt
-            out = tanhf((sinf(twoPi * ph) * expf(-t * 22) * 0.9 + nz * expf(-t * 12) * 2.2) * 1.6)
+        case .tripHop:      // big, low, roomy snare with a long noise tail, gently clipped
+            ph += (150 + 50 * expf(-t * 40)) * dt
+            out = tanhf((sinf(twoPi * ph) * expf(-t * 18) * 1.0 + nz * expf(-t * 8) * 2.2) * 1.6)
         case .industrial:   // clap-ish triple burst, crushed
             ph += 160 * dt
             let burst: Float = t < 0.03 ? (fmodf(t, 0.01) < 0.004 ? 1 : 0.3) : 1
@@ -188,9 +188,10 @@ struct LineBass {
         if gate == 0 && env < 1e-5 { return 0 }
         let out: Float
         switch s {
-        case .tripHop:
-            lp.set(180 + 1600 * expf(-t * 14), k: 0.9, sr: sr)
-            out = lp.tick(ph < 0.5 ? 1 : -1).lp * 0.55
+        case .tripHop:      // brooding, driven square/saw blend through a slow-closing filter
+            lp.set(220 + 900 * expf(-t * 5), k: 0.7, sr: sr)
+            let src = 0.5 * (ph < 0.5 ? 1 : -1) + 0.5 * (2 * ph - 1)
+            out = tanhf(lp.tick(src).lp * 2.5) * 0.5
         case .industrial:
             lp.set(110 + 2600 * expf(-t * 20), k: 0.35, sr: sr)
             out = tanhf(lp.tick(2 * ph - 1).lp * 3) * 0.7
@@ -229,7 +230,7 @@ struct Key {
         case .tripHop:      // FM electric piano
             pc += f * dt; pm += f * dt
             wrap(&pc); wrap(&pm)
-            let idx = 1.1 * expf(-t * 4) + 0.15
+            let idx = 0.8 * expf(-t * 4) + 0.1
             out = sinf(twoPi * pc + idx * sinf(twoPi * pm))
             amp = min(1, t / 0.003) * expf(-t * 0.7)
         }
@@ -346,7 +347,7 @@ final class Synth {
         toneR.set(cutoff, k: 1.1, sr: sr)
         let sweep = 0.5 + 0.5 * sinf(twoPi * lfoSlow)
         switch style {
-        case .tripHop: keysL.set(2200, k: 0.9, sr: sr)
+        case .tripHop: keysL.set(1400, k: 0.9, sr: sr)
         case .industrial: keysL.set(300 + 1800 * sweep, k: 0.3, sr: sr)
         case .techno: keysL.set(1100 + 700 * sweep, k: 0.8, sr: sr)
         }
@@ -420,10 +421,13 @@ final class Synth {
                 tx = droneBP.tick(noise.next()).bp * 0.06 + rumbleLP.tick(2 * dronePh - 1).lp * 0.22
             case .techno:   // tape hiss with a little air on top
                 tx = hissLP.tick(noise.next()).lp * 0.025 + airBP.tick(noise.next()).bp * 0.02
-            case .tripHop:
+            case .tripHop:  // vinyl crackle over a low, slowly breathing drone on the root
                 if noise.next() > 0.9992 { crackle = 0.3 + 0.3 * noise.next() }
                 crackle *= 0.55
-                tx = crackle * noise.next() + hissLP.tick(noise.next()).lp * 0.03
+                droneF += (droneTarget - droneF) * 0.0005
+                dronePh += droneF * 2 * dt; wrap(&dronePh)
+                let drone = rumbleLP.tick(2 * dronePh - 1).lp * 0.12 + droneBP.tick(noise.next()).bp * 0.025
+                tx = crackle * noise.next() + hissLP.tick(noise.next()).lp * 0.02 + drone
             }
             tx *= smoothGains[4]
 
@@ -458,7 +462,8 @@ final class Synth {
         if pattern.kick[bar][s] > 0 { kick.trigger(pattern.kick[bar][s] * human) }
         if pattern.snare[bar][s] > 0 { snare.trigger(pattern.snare[bar][s] * human, style, sr: sr) }
         if pattern.hat[bar][s] > 0 {
-            hat.trigger(pattern.hat[bar][s] * human, decay: [45, 50, 65][style.rawValue], cutoff: 7500, sr: sr)
+            hat.trigger(pattern.hat[bar][s] * human, decay: [45, 50, 65][style.rawValue],
+                        cutoff: style == .tripHop ? 6000 : 7500, sr: sr)
             openHat.choke()
         }
         if pattern.open[bar][s] > 0 {

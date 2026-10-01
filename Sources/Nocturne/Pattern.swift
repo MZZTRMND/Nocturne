@@ -23,7 +23,7 @@ enum Style: Int, CaseIterable, Identifiable {
 
     var defaults: Defaults {
         switch self {
-        case .tripHop: Defaults(bpm: 86, swing: 0.35, tone: 0.55, grit: 0.15, space: 0.45)
+        case .tripHop: Defaults(bpm: 80, swing: 0.2, tone: 0.42, grit: 0.3, space: 0.55)
         case .industrial: Defaults(bpm: 116, swing: 0.0, tone: 0.7, grit: 0.55, space: 0.35)
         case .techno: Defaults(bpm: 104, swing: 0.12, tone: 0.55, grit: 0.12, space: 0.65)
         }
@@ -31,7 +31,7 @@ enum Style: Int, CaseIterable, Identifiable {
 
     var trackNames: [String] {
         switch self {
-        case .tripHop: ["Drums", "Sub", "Bass", "Rhodes", "Vinyl"]
+        case .tripHop: ["Drums", "Sub", "Bass", "Rhodes", "Haze"]
         case .industrial: ["Machine", "Sub", "Grind", "Pad", "Drone"]
         case .techno: ["Drums", "Sub", "Arp", "Pad", "Tape"]
         }
@@ -80,11 +80,12 @@ private let noteNames = ["C", "D♭", "D", "E♭", "E", "F", "F♯", "G", "A♭"
 
 private func progressions(_ style: Style) -> [[(Int, Quality)]] {
     switch style {
+    // Mezzanine-dark: minor chords, a phrygian ♭II and a menacing ♭9 dominant.
     case .tripHop: [
-        [(0, .m9), (8, .maj7), (5, .m9), (7, .m7)],
-        [(0, .m9), (10, .maj9), (8, .maj7), (7, .dom7b9)],
-        [(0, .m11), (5, .m9), (3, .maj7), (7, .dom7b9)],
-        [(0, .m9), (3, .maj7), (10, .dom9), (5, .m9)],
+        [(0, .m7), (0, .m7), (1, .maj7), (0, .m7)],
+        [(0, .m9), (8, .maj7), (5, .m7), (7, .dom7b9)],
+        [(0, .m7), (0, .m7), (8, .maj7), (7, .five)],
+        [(0, .m11), (5, .m7), (1, .maj7), (0, .m7)],
     ]
     case .industrial: [
         [(0, .five), (0, .five), (1, .flat2), (10, .tritone)],
@@ -164,40 +165,44 @@ struct Pattern {
         return p
     }
 
+    /// Dark, heavy trip-hop in the Mezzanine vein: slow, sparse drums with a big snare,
+    /// a heartbeat kick option, a sustained sub and a brooding, driven bass riff.
     private mutating func writeTripHop(_ r: inout RNG) {
-        let kicks = r.pick([[0, 10], [0, 7, 10], [0, 3, 10], [0, 10, 11], [0, 6, 10]])
+        let kicks = r.pick([[0, 10], [0, 2, 10], [0, 7, 10], [0, 3, 10], [0, 1, 8, 9]])   // [0,1,…] = heartbeat
         let ghost = r.pick([7, 9, 15])
-        let busyHats = r.chance(0.5)
-        let openOn14 = r.chance(0.5)
-        let rim = r.chance(0.5) ? r.pick([3, 7, 13]) : -1
-        let lineSteps = r.pick([[3, 7, 14], [2, 6, 11, 14], [3, 11, 13], [6, 7, 14, 15]])
-        let motif = lineSteps.map { _ in r.pick([12, 7, 10, 12, 15]) }
-        let motifLen = lineSteps.map { _ in r.chance(0.5) ? 1 : 2 }
+        let openOn14 = r.chance(0.35)
+        let rim = r.chance(0.35) ? r.pick([7, 13]) : -1
+
+        // A short, repeating riff around the root: octave, minor third and the ♭2 that
+        // gives the menace. Long notes, mostly on the beat.
+        let riffs: [[(step: Int, len: Int, iv: Int)]] = [
+            [(0, 3, 0), (3, 3, 0), (6, 2, 12), (10, 4, 0)],
+            [(0, 6, 0), (8, 2, 3), (10, 4, 1)],
+            [(0, 3, 0), (3, 3, 0), (8, 4, -2), (12, 3, 0)],
+            [(0, 4, 0), (6, 2, 12), (8, 6, 1)],
+        ]
+        let riff = r.pick(riffs)
 
         for bar in 0..<4 {
-            for s in kicks { kick[bar][s] = s == 0 ? 1 : 0.8 }
+            for s in kicks { kick[bar][s] = s == 0 || s == 8 ? 1 : 0.75 }
             snare[bar][4] = 1
             snare[bar][12] = 1
-            if r.chance(0.6) { snare[bar][ghost] = 0.22 }
-            for s in stride(from: 0, to: 16, by: 2) { hat[bar][s] = s % 4 == 0 ? 0.6 : 0.42 }
-            if busyHats {
-                for s in stride(from: 1, to: 16, by: 2) { if r.chance(0.45) { hat[bar][s] = 0.2 } }
-            }
-            if openOn14 { hat[bar][14] = 0; open[bar][14] = 0.4 }
-            if rim >= 0 { perc[bar][rim] = 0.4 }
+            if r.chance(0.4) { snare[bar][ghost] = 0.18 }
+            for s in stride(from: 0, to: 16, by: 2) { hat[bar][s] = s % 4 == 0 ? 0.45 : 0.3 }
+            if openOn14 { hat[bar][14] = 0; open[bar][14] = 0.3 }
+            if rim >= 0 { perc[bar][rim] = 0.3 }
 
             let root = bassRoots[bar]
-            bass[bar][0] = Hit(len: 6, vel: 1, midi: root)
-            bass[bar][10] = Hit(len: 4, vel: 0.85, midi: r.chance(0.3) ? root + 12 : root)
-            if r.chance(0.4) { bass[bar][14] = Hit(len: 2, vel: 0.7, midi: root + 7) }
-            for (i, s) in lineSteps.enumerated() {
-                line[bar][s] = Hit(len: motifLen[i], vel: 0.75, midi: root + motif[i])
+            bass[bar][0] = Hit(len: 8, vel: 1, midi: root)
+            bass[bar][8] = Hit(len: 7, vel: 0.85, midi: root)
+            for n in riff {
+                line[bar][n.step] = Hit(len: n.len, vel: n.step == 0 ? 0.9 : 0.75, midi: root + 12 + n.iv)
             }
 
-            comp[bar][0] = Hit(len: 15, vel: 0.65)
-            if r.chance(0.35) { comp[bar][11] = Hit(len: 4, vel: 0.4) }
+            comp[bar][0] = Hit(len: 15, vel: 0.6)
+            if r.chance(0.25) { comp[bar][11] = Hit(len: 4, vel: 0.35) }
         }
-        if r.chance(0.7) { snare[3][14] = 0.45; snare[3][15] = 0.3 }
+        if r.chance(0.6) { snare[3][14] = 0.4; snare[3][15] = 0.25 }
     }
 
     private mutating func writeIndustrial(_ r: inout RNG) {

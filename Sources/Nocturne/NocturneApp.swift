@@ -17,12 +17,15 @@ struct NocturneApp: App {
     var body: some Scene {
         Window("Nocturne", id: "main") {
             ContentView(groove: groove)
+                .task { await RecordTest.runIfRequested(groove) }
         }
         .windowResizability(.contentSize)
         .commands {
             CommandMenu("Playback") {
                 Button(groove.isPlaying ? "Stop" : "Play") { groove.isPlaying.toggle() }
                     .keyboardShortcut(.space, modifiers: [])
+                Button(groove.isRecording ? "Stop Recording" : "Record") { groove.toggleRecording() }
+                    .keyboardShortcut("r")
                 Divider()
                 Picker("Style", selection: $groove.style) {
                     ForEach(Style.allCases) { style in
@@ -56,6 +59,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// `NOCTURNE_RECORD_TEST="<seconds>|<file.wav>"`: records through the live engine (the
+/// real tap path), saves straight to the file without a panel, then quits. Debug aid.
+/// An environment variable rather than arguments: AppKit treats a bare path argument as
+/// a document to open and then skips opening the main window.
+@MainActor
+enum RecordTest {
+    static func runIfRequested(_ groove: Groove) async {
+        guard let spec = ProcessInfo.processInfo.environment["NOCTURNE_RECORD_TEST"],
+              let bar = spec.firstIndex(of: "|"),
+              let seconds = Double(spec[..<bar]) else { return }
+        let dest = URL(fileURLWithPath: String(spec[spec.index(after: bar)...]))
+        groove.startRecording()
+        try? await Task.sleep(for: .seconds(seconds))
+        groove.stopRecording(tail: 1, save: dest)
+        try? await Task.sleep(for: .seconds(2))
+        NSApp.terminate(nil)
+    }
+}
+
 /// Offline render of every style to WAV, printing levels: a quick sanity check of the DSP
 /// without needing to listen. `Nocturne --render-test <dir>`
 enum RenderTest {
@@ -67,9 +89,9 @@ enum RenderTest {
             let nans = l.contains { !$0.isFinite } || r.contains { !$0.isFinite }
             let name = "\(dir)/\(style.title).wav"
             writeWAV(name, l, r, sr: 44_100)
-            print(String(format: "%-11@ mix peak %.2f rms %5.1f dB | drums rms %5.1f dB peak %.2f | rest rms %5.1f dB | nan:%@",
+            print(String(format: "%-11@ mix peak %.2f rms %5.1f dB | drums rms %5.1f dB peak %.2f | rest rms %5.1f dB | >2kHz %4.1f%% | nan:%@",
                          style.title as NSString, peak(l), db(rms(l)), db(rms(drums)), peak(drums),
-                         db(rms(rest)), nans ? "YES" : "no"))
+                         db(rms(rest)), brightness(l) * 100, nans ? "YES" : "no"))
         }
     }
 
@@ -95,6 +117,14 @@ enum RenderTest {
             at += n
         }
         return (l, r)
+    }
+
+    /// Share of signal energy above ~2 kHz (one-pole high-pass): lower means darker.
+    private static func brightness(_ x: [Float]) -> Float {
+        let c = expf(-2 * .pi * 2000 / 44_100)
+        var lp: Float = 0, hi: Float = 0, all: Float = 0
+        for v in x { lp = (1 - c) * v + c * lp; let h = v - lp; hi += h * h; all += v * v }
+        return all > 0 ? hi / all : 0
     }
 
     private static func peak(_ x: [Float]) -> Float { x.map(abs).max() ?? 0 }

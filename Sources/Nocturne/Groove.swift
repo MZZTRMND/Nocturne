@@ -1,5 +1,7 @@
+import AppKit
 import AVFoundation
 import Observation
+import UniformTypeIdentifiers
 
 struct Track: Identifiable {
     let id: Int
@@ -14,7 +16,12 @@ final class Groove {
     var style: Style = .tripHop {
         didSet { if style != oldValue { loadStyle() } }
     }
-    var isPlaying = false { didSet { synth.playing = isPlaying } }
+    var isPlaying = false {
+        didSet {
+            synth.playing = isPlaying
+            if !isPlaying && isRecording { stopRecording() }
+        }
+    }
     var bpm: Double = 86 { didSet { synth.bpm = Float(bpm); updateFX() } }
     var swing: Double = 0.35 { didSet { synth.swing = Float(swing) } }
     var tone: Double = 0.55 { didSet { synth.tone = Float(tone) } }
@@ -33,6 +40,8 @@ final class Groove {
     private(set) var bar = 0
     private(set) var levels = [Double](repeating: 0, count: Synth.trackCount)
     private(set) var pattern: Pattern
+    private(set) var isRecording = false
+    private(set) var recordingStarted: Date?
 
     var currentChord: String { pattern.chordNames[isPlaying ? bar : 0] }
 
@@ -40,7 +49,14 @@ final class Groove {
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private let delay = AVAudioUnitDelay()
     @ObservationIgnored private let reverb = AVAudioUnitReverb()
+    /// Last stage: catches peaks the reverb and delay add on top of the synth's own soft clip.
+    @ObservationIgnored private let limiter = AVAudioUnitEffect(audioComponentDescription: AudioComponentDescription(
+        componentType: kAudioUnitType_Effect, componentSubType: kAudioUnitSubType_PeakLimiter,
+        componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0))
     @ObservationIgnored private var poll: Timer?
+    @ObservationIgnored private let recorder = Recorder()
+    /// True while the reverb tail of a stopped take is still being captured.
+    @ObservationIgnored private var finishingTake = false
 
     init() {
         var sr = engine.outputNode.outputFormat(forBus: 0).sampleRate
@@ -54,9 +70,12 @@ final class Groove {
         engine.attach(source)
         engine.attach(delay)
         engine.attach(reverb)
+        engine.attach(limiter)
         engine.connect(source, to: delay, format: format)
         engine.connect(delay, to: reverb, format: format)
-        engine.connect(reverb, to: engine.mainMixerNode, format: format)
+        engine.connect(reverb, to: limiter, format: format)
+        engine.connect(limiter, to: engine.mainMixerNode, format: format)
+        AudioUnitSetParameter(limiter.audioUnit, kLimiterParam_PreGain, kAudioUnitScope_Global, 0, -1.5, 0)
         delay.feedback = 38
         delay.lowPassCutoff = 2600
 
@@ -82,6 +101,84 @@ final class Groove {
             return noErr
         }
     }
+
+    // MARK: Recording
+
+    func toggleRecording() {
+        isRecording ? stopRecording() : startRecording()
+    }
+
+    /// Records the final mix to a temporary WAV; playback starts with it.
+    func startRecording() {
+        guard !isRecording, !finishingTake else { return }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Nocturne-\(UUID().uuidString).wav")
+        do {
+            try recorder.start(on: engine.mainMixerNode, writingTo: url)
+        } catch {
+            NSLog("Nocturne: could not start recording: \(error)")
+            return
+        }
+        isRecording = true
+        recordingStarted = .now
+        if !isPlaying { isPlaying = true }
+    }
+
+    /// Ends the take. Capture runs on for a couple of seconds so reverb and delay tails
+    /// aren't chopped off, then `save` decides where it goes (nil asks with a save panel).
+    func stopRecording(tail: Double = 2, save destination: URL? = nil) {
+        guard isRecording else { return }
+        isRecording = false
+        recordingStarted = nil
+        finishingTake = true
+        let stamp = DateFormatter()
+        stamp.dateFormat = "yyyy-MM-dd HH.mm"
+        let suggestedName = "Nocturne \(style.title) \(stamp.string(from: .now))"
+        DispatchQueue.main.asyncAfter(deadline: .now() + tail) { [self] in
+            finishingTake = false
+            guard let take = recorder.stop(on: engine.mainMixerNode) else { return }
+            if let destination {
+                Groove.move(take, to: destination)
+            } else {
+                presentSavePanel(for: take, name: suggestedName)
+            }
+        }
+    }
+
+    private func presentSavePanel(for take: URL, name: String) {
+        let panel = NSSavePanel()
+        panel.title = "Save Recording"
+        panel.allowedContentTypes = [.wav]
+        panel.nameFieldStringValue = name + ".wav"
+        panel.directoryURL = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first
+        panel.canCreateDirectories = true
+        let finish: (NSApplication.ModalResponse) -> Void = { response in
+            if response == .OK, let dest = panel.url {
+                Groove.move(take, to: dest)
+            } else {
+                try? FileManager.default.removeItem(at: take)
+            }
+        }
+        if let window = NSApp.keyWindow ?? NSApp.windows.first {
+            panel.beginSheetModal(for: window, completionHandler: finish)
+        } else {
+            finish(panel.runModal())
+        }
+    }
+
+    private static func move(_ take: URL, to dest: URL) {
+        do {
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)      // the save panel already confirmed replacing it
+            }
+            try FileManager.default.moveItem(at: take, to: dest)
+        } catch {
+            NSLog("Nocturne: could not save recording: \(error)")
+            NSAlert(error: error).runModal()
+        }
+    }
+
+    // MARK: Pattern
 
     private func loadPattern() {
         pattern = Pattern.make(style, seed: .random(in: 0...UInt64.max))

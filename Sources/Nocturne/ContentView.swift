@@ -86,14 +86,48 @@ private struct TransportCard: View {
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
                     .contentTransition(.numericText())
                     .animation(.snappy, value: groove.currentChord)
-                Text("\(Int(groove.bpm.rounded())) bpm · \(groove.style.keyName)")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                if let started = groove.recordingStarted {
+                    TimelineView(.periodic(from: started, by: 1)) { ctx in
+                        let secs = max(0, Int(ctx.date.timeIntervalSince(started)))
+                        Text("REC \(secs / 60):\(String(format: "%02d", secs % 60))")
+                            .font(.callout.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(.red)
+                    }
+                } else {
+                    Text("\(Int(groove.bpm.rounded())) bpm · \(groove.style.keyName)")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
             }
             Spacer(minLength: 0)
+            RecordButton(groove: groove)
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
+    }
+}
+
+/// Red dot that starts a take; while recording it pulses and stops the take.
+private struct RecordButton: View {
+    let groove: Groove
+
+    var body: some View {
+        Button {
+            groove.toggleRecording()
+        } label: {
+            Image(systemName: groove.isRecording ? "stop.circle.fill" : "record.circle")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.red)
+                .symbolEffect(.pulse, isActive: groove.isRecording)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 28, height: 28)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .help(groove.isRecording ? "Stop recording and save (⌘R)" : "Record (⌘R)")
+        .accessibilityLabel(groove.isRecording ? "Stop recording" : "Record")
     }
 }
 
