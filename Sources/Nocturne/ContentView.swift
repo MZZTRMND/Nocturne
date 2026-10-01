@@ -14,6 +14,7 @@ extension Style {
 /// window's title and the style menu live in the native toolbar.
 struct ContentView: View {
     @Bindable var groove: Groove
+    @State private var showShortcuts = false
 
     var body: some View {
         GlassEffectContainer(spacing: 14) {
@@ -39,6 +40,17 @@ struct ContentView: View {
         .frame(width: 1026)
         .background { Backdrop(accent: groove.style.accent, energy: groove.levels[0]) }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showShortcuts.toggle()
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .keyboardShortcut("/")
+                .help("Shortcuts and keyboard (⌘/)")
+                .accessibilityLabel("Shortcuts and keyboard")
+                .popover(isPresented: $showShortcuts, arrowEdge: .bottom) { ShortcutsView() }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Picker("Style", selection: $groove.style) {

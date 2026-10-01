@@ -48,7 +48,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            let renderer = ImageRenderer(content: ContentView(groove: Groove()).environment(\.colorScheme, .dark))
+            // `--snapshot-shortcuts` renders the help popover's content on its own.
+            let content = args.contains("--snapshot-shortcuts")
+                ? AnyView(ShortcutsView().background(Color(white: 0.16)))
+                : AnyView(ContentView(groove: Groove()))
+            let renderer = ImageRenderer(content: content.environment(\.colorScheme, .dark))
             renderer.scale = 2
             if let cg = renderer.cgImage {
                 let rep = NSBitmapImageRep(cgImage: cg)
