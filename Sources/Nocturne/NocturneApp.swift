@@ -96,6 +96,11 @@ enum RenderTest {
             print(String(format: "%-11@ mix peak %.2f rms %5.1f dB | drums rms %5.1f dB peak %.2f | rest rms %5.1f dB | >2kHz %4.1f%% | nan:%@",
                          style.title as NSString, peak(l), db(rms(l)), db(rms(drums)), peak(drums),
                          db(rms(rest)), brightness(l) * 100, nans ? "YES" : "no"))
+            let parts = (0..<Synth.trackCount).map { i -> String in
+                var g = [Float](repeating: 0, count: Synth.trackCount); g[i] = 0.8
+                return String(format: "%@ %.1f", style.trackNames[i], db(rms(render(style, gains: g).0)))
+            }
+            print("            per track dB: " + parts.joined(separator: " · "))
         }
     }
 

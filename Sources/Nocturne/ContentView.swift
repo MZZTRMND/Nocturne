@@ -5,7 +5,8 @@ extension Style {
         switch self {
         case .tripHop: Color(red: 1.0, green: 0.62, blue: 0.28)
         case .industrial: Color(red: 0.96, green: 0.34, blue: 0.34)
-        case .techno: Color(red: 0.25, green: 0.6, blue: 1.0)
+        case .dreamy: Color(red: 0.25, green: 0.6, blue: 1.0)
+        case .cinematic: Color(red: 0.35, green: 0.85, blue: 0.72)
         }
     }
 }
@@ -41,7 +42,15 @@ struct ContentView: View {
         .padding(.top, 6)
         .frame(width: 1026)
         .background { Backdrop(accent: groove.style.accent, energy: groove.levels[0]) }
+        .toolbar(removing: .title)
         .toolbar {
+            // Our own title, so it can be bold and lowercase.
+            ToolbarItem(placement: .navigation) {
+                Text("nocturne")
+                    .font(.system(size: 16, weight: .bold))
+                    .padding(.leading, 4)
+            }
+            .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     groove.muteAll.toggle()

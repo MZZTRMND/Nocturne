@@ -8,7 +8,8 @@ struct ShortcutsView: View {
         (["⇧", "⌘", "M"], "Mute / unmute all"),
         (["⌘", "1"], "Trip-Hop"),
         (["⌘", "2"], "Industrial"),
-        (["⌘", "3"], "Techno"),
+        (["⌘", "3"], "Dreamy"),
+        (["⌘", "4"], "Cinematic"),
         (["⌘", "/"], "Show this help"),
     ]
 

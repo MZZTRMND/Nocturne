@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Style
 
 enum Style: Int, CaseIterable, Identifiable {
-    case tripHop, industrial, techno
+    case tripHop, industrial, dreamy, cinematic
 
     var id: Int { rawValue }
 
@@ -11,13 +11,14 @@ enum Style: Int, CaseIterable, Identifiable {
         switch self {
         case .tripHop: "Trip-Hop"
         case .industrial: "Industrial"
-        case .techno: "Techno"
+        case .dreamy: "Dreamy"
+        case .cinematic: "Cinematic"
         }
     }
 
     /// MIDI note the progressions are built on.
-    var keyRoot: Int { [50, 52, 57][rawValue] }          // D3, E3, A3
-    var keyName: String { ["D minor", "E minor", "A minor"][rawValue] }
+    var keyRoot: Int { [50, 52, 57, 48][rawValue] }      // D3, E3, A3, C3
+    var keyName: String { ["D minor", "E minor", "A minor", "C minor"][rawValue] }
 
     struct Defaults { let bpm, swing, tone, grit, space: Double }
 
@@ -25,7 +26,8 @@ enum Style: Int, CaseIterable, Identifiable {
         switch self {
         case .tripHop: Defaults(bpm: 80, swing: 0.2, tone: 0.42, grit: 0.3, space: 0.55)
         case .industrial: Defaults(bpm: 116, swing: 0.0, tone: 0.7, grit: 0.55, space: 0.35)
-        case .techno: Defaults(bpm: 104, swing: 0.12, tone: 0.55, grit: 0.12, space: 0.65)
+        case .dreamy: Defaults(bpm: 104, swing: 0.12, tone: 0.55, grit: 0.12, space: 0.65)
+        case .cinematic: Defaults(bpm: 96, swing: 0, tone: 0.5, grit: 0.35, space: 0.5)
         }
     }
 
@@ -33,7 +35,8 @@ enum Style: Int, CaseIterable, Identifiable {
         switch self {
         case .tripHop: ["Drums", "Sub", "Bass", "Rhodes", "Haze"]
         case .industrial: ["Machine", "Sub", "Grind", "Pad", "Drone"]
-        case .techno: ["Drums", "Sub", "Arp", "Pad", "Tape"]
+        case .dreamy: ["Drums", "Sub", "Arp", "Pad", "Tape"]
+        case .cinematic: ["Drums", "Drone", "Pulse", "Piano", "Static"]
         }
     }
 }
@@ -92,7 +95,13 @@ private func progressions(_ style: Style) -> [[(Int, Quality)]] {
         [(0, .five), (3, .five), (1, .flat2), (0, .tritone)],
         [(0, .flat2), (0, .five), (5, .tritone), (1, .five)],
     ]
-    case .techno: [
+    // Minimal and bruised: C minor sitting on A♭ and E♭, open fifths on B♭.
+    case .cinematic: [
+        [(0, .m7), (0, .m7), (8, .maj7), (8, .maj7)],
+        [(0, .five), (8, .maj7), (3, .maj7), (10, .five)],
+        [(0, .m7), (5, .m7), (8, .maj7), (7, .five)],
+    ]
+    case .dreamy: [
         [(0, .m9), (8, .maj9), (3, .maj7), (10, .dom9)],
         [(0, .m9), (5, .m9), (8, .maj9), (7, .m7)],
         [(8, .maj9), (3, .maj7), (10, .dom9), (0, .m11)],
@@ -128,12 +137,13 @@ struct Hit {
 }
 
 /// Four bars of 16 steps. Drum lanes hold velocities (0 = silent). `bass` is the sub,
-/// `line` the audible bass part, `comp` the rhythm of the keys' chords.
+/// `line` the audible bass part, `comp` the rhythm of the keys' chords, `melody` single
+/// notes on the keys sound.
 struct Pattern {
     let style: Style
     var kick = Pattern.lane(), snare = Pattern.lane(), hat = Pattern.lane()
     var open = Pattern.lane(), perc = Pattern.lane()
-    var bass = Pattern.notes(), line = Pattern.notes(), comp = Pattern.notes()
+    var bass = Pattern.notes(), line = Pattern.notes(), comp = Pattern.notes(), melody = Pattern.notes()
     var chords: [[Int]] = []
     var bassRoots: [Int] = []
     var chordNames: [String] = []
@@ -160,7 +170,8 @@ struct Pattern {
         switch style {
         case .tripHop: p.writeTripHop(&r)
         case .industrial: p.writeIndustrial(&r)
-        case .techno: p.writeTechno(&r)
+        case .dreamy: p.writeDreamy(&r)
+        case .cinematic: p.writeCinematic(&r)
         }
         return p
     }
@@ -234,7 +245,7 @@ struct Pattern {
 
     /// Ambient techno in the Board of Canada / Moby vein: a soft four-to-the-floor, a held
     /// sub, a slow pad per bar and a plucked arpeggio running through the chord.
-    private mutating func writeTechno(_ r: inout RNG) {
+    private mutating func writeDreamy(_ r: inout RNG) {
         let shape = r.pick([[0, 1, 2, 3, 2, 1, 0, 1], [0, 2, 1, 3, 0, 2, 1, 3],
                             [0, 1, 2, 3, 4, 3, 2, 1], [3, 2, 1, 0, 1, 2, 3, 2]])
         let rests = (0..<8).map { i in i > 0 && r.chance(0.2) }
@@ -259,6 +270,37 @@ struct Pattern {
                 line[bar][i * 2] = Hit(len: 2, vel: i % 4 == 0 ? 0.8 : 0.6, midi: notes[idx % notes.count] + 12)
             }
             comp[bar][0] = Hit(len: 16, vel: 0.55)
+        }
+    }
+
+    /// Score-like and restrained, after the Social Network soundtrack: a sparse felt-piano
+    /// melody over soft chords, a long saturated drone, a driving 16th-note analog pulse
+    /// and minimal, glitchy percussion.
+    private mutating func writeCinematic(_ r: inout RNG) {
+        let pulse = r.pick([[0, 0, 12, 0, 7, 0, 12, 0, 0, 0, 12, 0, 7, 0, 10, 0],
+                            [0, 12, 0, 7, 0, 12, 0, 7, 0, 12, 0, 7, 0, 12, 3, 7],
+                            [0, 7, 12, 7, 0, 7, 12, 7, 0, 7, 12, 15, 12, 7, 0, 7]])
+        let tickGaps = (0..<16).map { _ in r.chance(0.3) }
+        let melodySteps = r.pick([[0, 6, 10], [3, 8, 14], [0, 4, 11], [2, 8]])
+        let melodyPick = melodySteps.map { _ in Int(r.next() % 4) }
+
+        for bar in 0..<4 {
+            kick[bar][0] = 0.7
+            if bar % 2 == 1 || r.chance(0.3) { kick[bar][8] = 0.55 }
+            if bar % 2 == 1 { snare[bar][12] = 0.5 }
+            for s in 0..<16 where !tickGaps[s] { hat[bar][s] = s % 4 == 0 ? 0.25 : 0.12 }
+            if r.chance(0.5) { perc[bar][r.pick([5, 7, 13, 15])] = 0.5 }
+
+            let root = bassRoots[bar]
+            bass[bar][0] = Hit(len: 16, vel: 0.8, midi: root)
+            for s in 0..<16 {
+                line[bar][s] = Hit(len: 1, vel: s % 4 == 0 ? 0.85 : 0.6, midi: root + 12 + pulse[s])
+            }
+            comp[bar][0] = Hit(len: 16, vel: 0.35)
+            let notes = chords[bar].sorted()
+            for (i, s) in melodySteps.enumerated() {
+                melody[bar][s] = Hit(len: 6, vel: 0.65, midi: notes[melodyPick[i] % notes.count] + 12)
+            }
         }
     }
 }

@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 
 struct Track: Identifiable {
     let id: Int
-    let icon: String
     var volume: Double = 0.8
     var muted = false
 }
@@ -31,11 +30,11 @@ final class Groove {
     /// Silences everything (playback and recordings) without touching the Volume knob.
     var muteAll = false { didSet { pushMaster() } }
     var tracks: [Track] = [
-        Track(id: 0, icon: "square.grid.3x3.fill"),
-        Track(id: 1, icon: "waveform"),
-        Track(id: 2, icon: "guitars.fill"),
-        Track(id: 3, icon: "pianokeys"),
-        Track(id: 4, icon: "sparkles"),
+        Track(id: 0),
+        Track(id: 1),
+        Track(id: 2),
+        Track(id: 3),
+        Track(id: 4),
     ] { didSet { pushGains() } }
 
     private(set) var step = -1
@@ -208,14 +207,14 @@ final class Groove {
         swing = d.swing
         tone = d.tone
         grit = d.grit
-        reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral][style.rawValue])
+        reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral, .mediumHall][style.rawValue])
         space = d.space
         loadPattern()
     }
 
     private func updateFX() {
         reverb.wetDryMix = Float(space * 55)
-        delay.wetDryMix = Float(space * [30, 12, 35][style.rawValue])     // dub delay for trip-hop and techno
+        delay.wetDryMix = Float(space * [30, 12, 35, 15][style.rawValue])     // dub delay for trip-hop and dreamy
         delay.delayTime = 0.75 * 60 / bpm      // dotted eighth
     }
 

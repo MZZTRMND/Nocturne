@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// One glass card per track, each with a vertical fader. Click a channel's name or icon
-/// to mute it.
+/// One glass card per track, each with a vertical fader. Click a channel's name to
+/// mute it.
 struct FaderPanel: View {
     @Bindable var groove: Groove
 
@@ -32,18 +32,16 @@ private struct ChannelStrip: View {
             Fader(value: $track.volume, level: track.muted ? 0 : level, accent: accent, name: name)
                 .opacity(track.muted ? 0.4 : 1)
 
-            VStack(spacing: 4) {
-                Image(systemName: track.muted ? "speaker.slash.fill" : track.icon)
-                    .font(.body)
-                    .foregroundStyle(track.muted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
-                    .opacity(track.muted ? 1 : 0.5 + 0.5 * level)
-                    .frame(height: 18)
-                    .contentTransition(.symbolEffect(.replace))
+            VStack(spacing: 2) {
                 Text(name)
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .foregroundStyle(track.muted ? .secondary : .primary)
+                Text("Muted")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .opacity(track.muted ? 1 : 0)       // keeps its space so the fader doesn't jump
             }
             .frame(maxWidth: .infinity)
             .contentShape(.rect)
