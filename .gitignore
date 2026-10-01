@@ -1,0 +1,4 @@
+.build/
+renders/
+*.app
+.DS_Store
