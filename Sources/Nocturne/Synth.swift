@@ -241,6 +241,65 @@ struct Key {
     }
 }
 
+/// One-shot sounds for the drum pads that the pattern doesn't use.
+struct PadSound {
+    enum Kind { case clap, tom(Float), shaker, cowbell, crash, boom, zap, riser }
+
+    let kind: Kind
+    var t: Float = 10, vel: Float = 0, ph: Float = 0, ph2: Float = 0, sr: Float = 48_000
+    var f = SVF()
+    var mph = SIMD8<Float>(repeating: 0)
+    static let metal = SIMD8<Float>(205.3, 304.4, 369.6, 522.7, 540.0, 800.0, 0, 0) * 2.1
+
+    init(_ kind: Kind) { self.kind = kind }
+
+    mutating func trigger(_ v: Float, sr: Float) {
+        t = 0; vel = v; ph = 0; ph2 = 0; self.sr = sr
+        switch kind {
+        case .clap: f.set(1400, k: 0.7, sr: sr)
+        case .shaker: f.set(6500, k: 1, sr: sr)
+        case .cowbell: f.set(900, k: 0.5, sr: sr)
+        case .crash: f.set(5000, k: 1, sr: sr)
+        default: break
+        }
+    }
+
+    mutating func next(_ dt: Float, _ n: Float) -> Float {
+        guard t < 3 else { return 0 }
+        var out: Float
+        switch kind {
+        case .clap:
+            let burst: Float = t < 0.03 ? (fmodf(t, 0.01) < 0.004 ? 1 : 0.25) : 1
+            out = tanhf(f.tick(n).bp * expf(-t * 12) * 3 * burst) * 0.8
+        case .tom(let base):
+            ph += base * (1 + 0.6 * expf(-t * 18)) * dt; wrap(&ph)
+            out = sinf(twoPi * ph) * expf(-t * 7) + n * 0.08 * expf(-t * 40)
+        case .shaker:
+            out = f.tick(n).hp * min(1, t / 0.012) * expf(-t * 28) * 0.95
+        case .cowbell:
+            ph += 540 * dt; ph2 += 800 * dt; wrap(&ph); wrap(&ph2)
+            let sq: Float = (ph < 0.5 ? 1 : -1) + (ph2 < 0.5 ? 1 : -1)
+            out = f.tick(sq * 0.5).bp * expf(-t * 9) * 0.65
+        case .crash:
+            mph += PadSound.metal * dt
+            mph -= mph.rounded(.down)
+            let sq = SIMD8<Float>(repeating: -1).replacing(with: 1, where: mph .< 0.5)
+            out = f.tick((sq.sum() - 2) * 0.1 + n * 0.6).hp * expf(-t * 1.6) * 1.2
+        case .boom:     // long 808 sub with a drop
+            ph += (48 + 60 * expf(-t * 20)) * dt; wrap(&ph)
+            out = tanhf(sinf(twoPi * ph) * 2.5) * expf(-t * 1.5) * 1.3
+        case .zap:      // laser: fast downward sweep
+            ph += (80 + 2000 * expf(-t * 25)) * dt; wrap(&ph)
+            out = sinf(twoPi * ph) * expf(-t * 8) * 0.5
+        case .riser:    // noise swept up over ~1.5 s
+            f.set(300 * powf(26, min(t / 1.5, 1)), k: 0.6, sr: sr)
+            out = f.tick(n).bp * min(1, t / 1.2) * (t < 1.5 ? 1 : expf(-(t - 1.5) * 8)) * 0.6
+        }
+        t += dt
+        return out * vel
+    }
+}
+
 // MARK: - Synth
 
 /// Renders the whole band sample by sample on the audio thread. Controls are plain stored
@@ -271,6 +330,19 @@ final class Synth {
     private var pattern: Pattern
     /// Live keyboard events (midi, isDown), queued by the main thread.
     private var events: [(Int, Bool)] = []
+    /// Drum pad hits (pad index), queued by the main thread.
+    private var padEvents: [Int] = []
+
+    /// Pads, bottom-left first. 0–3 and 5 use the style's own drum voices; the rest are
+    /// `PadSound`s, except 12 (chord stab) and 13 (bass hit), which play the current chord.
+    static let padNames = ["Kick", "Snare", "Hat", "Open Hat",
+                           "Clap", "Rim", "Low Tom", "High Tom",
+                           "Shaker", "Cowbell", "Crash", "Boom",
+                           "Stab", "Bass", "Zap", "Riser"]
+    static let padCount = 16
+    /// Bumped every time a pad's sound plays, from a click or from the sequencer; the UI
+    /// watches these to light the pads.
+    let padHits = UnsafeMutablePointer<Int>.allocate(capacity: Synth.padCount)
 
     private var wasPlaying = false
     private var globalStep = 0
@@ -282,6 +354,13 @@ final class Synth {
     private var kick = Kick(), snare = Snare(), hat = Hat(), openHat = Hat(), perc = Perc()
     private var bass = Bass()
     private var line = LineBass()
+    private var padSounds: [PadSound] = [
+        PadSound(.clap), PadSound(.tom(95)), PadSound(.tom(160)), PadSound(.shaker),
+        PadSound(.cowbell), PadSound(.crash), PadSound(.boom), PadSound(.zap), PadSound(.riser),
+    ]
+    /// Pad index → slot in `padSounds` (-1 = handled by another voice).
+    private static let padSlot = [-1, -1, -1, -1, 0, -1, 1, 2, 3, 4, 5, 6, -1, -1, 7, 8]
+    private var lastBar = 0
     private var keys = [Key](repeating: Key(), count: 12)
     private var live = [Key](repeating: Key(), count: 10)
     private var liveNote = [Int](repeating: -1, count: 10)
@@ -303,6 +382,8 @@ final class Synth {
         rel = expf(-1 / (0.06 * sampleRate))
         for i in 0..<Synth.trackCount { gains[i] = 0.8; meters[i] = 0 }
         events.reserveCapacity(64)
+        padEvents.reserveCapacity(64)
+        for i in 0..<Synth.padCount { padHits[i] = 0 }
         hissLP.set(3200, k: 1, sr: sr)
         rumbleLP.set(160, k: 0.9, sr: sr)
     }
@@ -310,11 +391,18 @@ final class Synth {
     deinit {
         gains.deallocate()
         meters.deallocate()
+        padHits.deallocate()
     }
 
     func setPattern(_ p: Pattern) {
         lock.lock()
         pending = p
+        lock.unlock()
+    }
+
+    func hitPad(_ index: Int) {
+        lock.lock()
+        padEvents.append(index)
         lock.unlock()
     }
 
@@ -334,6 +422,8 @@ final class Synth {
             if let p = pending { pattern = p; pending = nil }
             for (m, down) in events { down ? startLive(m) : stopLive(m) }
             events.removeAll(keepingCapacity: true)
+            for i in padEvents { triggerPad(i, vel: 1) }
+            padEvents.removeAll(keepingCapacity: true)
             lock.unlock()
         }
 
@@ -370,9 +460,12 @@ final class Synth {
             let hh = hat.next(dt, noise.next()) * 0.4
             let oh = openHat.next(dt, noise.next()) * 0.32
             let pc = perc.next(style, dt, noise.next()) * 0.45
+            var pads: Float = 0
+            for v in 0..<padSounds.count where padSounds[v].t < 3 { pads += padSounds[v].next(dt, noise.next()) }
+            pads *= 0.6
             let dScale: Float = style == .techno ? 0.7 : 1    // ambient: drums sit behind the pad
-            let dL = (k + sn + hh * 0.7 + oh * 0.7 + pc * 1.2) * smoothGains[0] * dScale
-            let dR = (k + sn + hh * 1.3 + oh * 1.3 + pc * 0.8) * smoothGains[0] * dScale
+            let dL = (k + sn + hh * 0.7 + oh * 0.7 + pc * 1.2 + pads) * smoothGains[0] * dScale
+            let dR = (k + sn + hh * 1.3 + oh * 1.3 + pc * 0.8 + pads) * smoothGains[0] * dScale
 
             // Everything else ducks under the kick, so it punches through the mix.
             kickFollow = max(abs(k) * smoothGains[0], kickFollow * 0.9993)
@@ -461,17 +554,20 @@ final class Synth {
         let base = sr * 60 / max(bpm, 30) / 4
         let human = 0.92 + 0.08 * noise.next()
 
-        if pattern.kick[bar][s] > 0 { kick.trigger(pattern.kick[bar][s] * human) }
-        if pattern.snare[bar][s] > 0 { snare.trigger(pattern.snare[bar][s] * human, style, sr: sr) }
+        lastBar = bar
+        if pattern.kick[bar][s] > 0 { kick.trigger(pattern.kick[bar][s] * human); padHits[0] &+= 1 }
+        if pattern.snare[bar][s] > 0 { snare.trigger(pattern.snare[bar][s] * human, style, sr: sr); padHits[1] &+= 1 }
         if pattern.hat[bar][s] > 0 {
             hat.trigger(pattern.hat[bar][s] * human, decay: [45, 50, 65][style.rawValue],
                         cutoff: style == .tripHop ? 6000 : 7500, sr: sr)
             openHat.choke()
+            padHits[2] &+= 1
         }
         if pattern.open[bar][s] > 0 {
+            padHits[3] &+= 1
             openHat.trigger(pattern.open[bar][s] * human, decay: [9, 12, 10][style.rawValue], cutoff: 7000, sr: sr)
         }
-        if pattern.perc[bar][s] > 0 { perc.trigger(pattern.perc[bar][s] * human, sr: sr) }
+        if pattern.perc[bar][s] > 0 { perc.trigger(pattern.perc[bar][s] * human, sr: sr); padHits[5] &+= 1 }
         if let h = pattern.bass[bar][s] {
             bass.trigger(mtof(h.midi), samples: Int(Float(h.len) * base * 0.92), vel: h.vel)
         }
@@ -499,6 +595,29 @@ final class Synth {
         }
         nextPanLeft.toggle()
         keys[idx] = Key(on: true, f: mtof(midi), pan: nextPanLeft ? -0.35 : 0.35, gate: samples, vel: vel)
+    }
+
+    private func triggerPad(_ i: Int, vel: Float) {
+        guard i >= 0 && i < Synth.padCount else { return }
+        let style = pattern.style
+        let base = sr * 60 / max(bpm, 30) / 4
+        switch i {
+        case 0: kick.trigger(vel)
+        case 1: snare.trigger(vel, style, sr: sr)
+        case 2:
+            hat.trigger(vel * 0.6, decay: [45, 50, 65][style.rawValue], cutoff: style == .tripHop ? 6000 : 7500, sr: sr)
+            openHat.choke()
+        case 3: openHat.trigger(vel * 0.5, decay: [9, 12, 10][style.rawValue], cutoff: 7000, sr: sr)
+        case 5: perc.trigger(vel * 0.6, sr: sr)
+        case 12:
+            for m in pattern.chords[lastBar] { triggerKey(m, samples: Int(base * 2), vel: 0.6 * vel) }
+        case 13:
+            line.trigger(mtof(pattern.bassRoots[lastBar] + 12), samples: Int(base * 3), vel: 0.9 * vel)
+        default:
+            let slot = Synth.padSlot[i]
+            if slot >= 0 { padSounds[slot].trigger(vel, sr: sr) }
+        }
+        padHits[i] &+= 1
     }
 
     private func startLive(_ midi: Int) {

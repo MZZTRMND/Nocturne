@@ -10,8 +10,8 @@ extension Style {
     }
 }
 
-/// Transport, knobs and recording on the left; progression, keyboard and tracks on the
-/// right. The window's title and the shortcuts help live in the native toolbar.
+/// Transport, knobs and recording on the left; progression, faders, pads and keyboard on
+/// the right. The window's title and the shortcuts help live in the native toolbar.
 struct ContentView: View {
     @Bindable var groove: Groove
     @State private var showShortcuts = false
@@ -29,8 +29,12 @@ struct ContentView: View {
 
                 VStack(spacing: 14) {
                     ProgressionPanel(groove: groove)
+                    HStack(spacing: 14) {
+                        FaderPanel(groove: groove)
+                        PadPanel(groove: groove)
+                    }
+                    .frame(height: 300)
                     PianoPanel(groove: groove)
-                    MixerRow(groove: groove)
                 }
                 .frame(maxHeight: .infinity)
             }
@@ -253,70 +257,6 @@ private struct ProgressionPanel: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Progression")
         .accessibilityValue(p.chordNames.joined(separator: ", "))
-    }
-}
-
-// MARK: - Middle
-
-private struct MixerRow: View {
-    @Bindable var groove: Groove
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach($groove.tracks) { $track in
-                TrackCard(track: $track,
-                          name: groove.trackName(track.id),
-                          level: groove.levels[track.id],
-                          accent: groove.style.accent)
-            }
-        }
-    }
-}
-
-/// Click anywhere on the card (outside the slider) to mute or unmute the track.
-private struct TrackCard: View {
-    @Binding var track: Track
-    let name: String
-    let level: Double
-    let accent: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: track.icon)
-                    .font(.body)
-                    .foregroundStyle(.tint)
-                    .opacity(track.muted ? 0.3 : 0.45 + 0.55 * level)
-                    .scaleEffect(1 + 0.12 * level)
-                    .frame(width: 20)
-                Text(name)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .contentTransition(.opacity)
-                Spacer(minLength: 2)
-                if track.muted {
-                    Text("Muted")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .transition(.opacity)
-                }
-            }
-            Slider(value: $track.volume, in: 0...1)
-                .controlSize(.small)
-                .disabled(track.muted)
-                .accessibilityLabel("\(name) volume")
-        }
-        .opacity(track.muted ? 0.5 : 1)
-        .padding(12)
-        .contentShape(.rect(cornerRadius: 22))
-        .onTapGesture { withAnimation(.snappy) { track.muted.toggle() } }
-        .glassEffect(.regular.tint(track.muted ? .clear : accent.opacity(0.06 + 0.16 * level)).interactive(),
-                     in: .rect(cornerRadius: 22))
-        .help(track.muted ? "Click to unmute \(name)" : "Click to mute \(name)")
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(track.muted ? "\(name), muted" : name)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: track.muted ? "Unmute" : "Mute") { track.muted.toggle() }
     }
 }
 

@@ -86,6 +86,7 @@ enum RecordTest {
 /// without needing to listen. `Nocturne --render-test <dir>`
 enum RenderTest {
     static func run(into dir: String) {
+        padReport()
         for style in Style.allCases {
             let (l, r) = render(style, gains: [0.8, 0.8, 0.8, 0.8, 0.8])
             let drums = render(style, gains: [0.8, 0, 0, 0, 0]).0
@@ -97,6 +98,26 @@ enum RenderTest {
                          style.title as NSString, peak(l), db(rms(l)), db(rms(drums)), peak(drums),
                          db(rms(rest)), brightness(l) * 100, nans ? "YES" : "no"))
         }
+    }
+
+    /// Hits each pad on its own (sequencer stopped) and prints its peak level.
+    static func padReport() {
+        var line = "Pads:"
+        for i in 0..<Synth.padCount {
+            let synth = Synth(sampleRate: 44_100, pattern: Pattern.make(.tripHop, seed: 42))
+            synth.hitPad(i)
+            var l = [Float](repeating: 0, count: 66_150), r = l     // 1.5 s
+            var at = 0
+            while at < l.count {
+                let n = min(512, l.count - at)
+                l.withUnsafeMutableBufferPointer { lp in
+                    r.withUnsafeMutableBufferPointer { rp in synth.render(n, lp.baseAddress! + at, rp.baseAddress! + at) }
+                }
+                at += n
+            }
+            line += String(format: " %@ %.2f%@", Synth.padNames[i], peak(l), i % 4 == 3 ? " |" : ",")
+        }
+        print(line)
     }
 
     private static func render(_ style: Style, gains: [Float]) -> ([Float], [Float]) {

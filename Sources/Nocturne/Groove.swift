@@ -41,6 +41,8 @@ final class Groove {
     private(set) var step = -1
     private(set) var bar = 0
     private(set) var levels = [Double](repeating: 0, count: Synth.trackCount)
+    /// Per-pad hit counters, mirrored from the synth: a change means "light this pad".
+    private(set) var padHits = [Int](repeating: 0, count: Synth.padCount)
     private(set) var pattern: Pattern
     private(set) var isRecording = false
     private(set) var recordingStarted: Date?
@@ -199,6 +201,8 @@ final class Groove {
     /// Notes of the chord currently sounding (bar 1's chord while stopped).
     var chordNotes: Set<Int> { Set(pattern.chords[isPlaying ? bar : 0]) }
 
+    func hitPad(_ index: Int) { synth.hitPad(index) }
+
     func noteOn(_ midi: Int) { synth.noteOn(midi) }
     func noteOff(_ midi: Int) { synth.noteOff(midi) }
 
@@ -230,6 +234,7 @@ final class Groove {
         if synth.uiBar != bar { bar = synth.uiBar }
         let new = (0..<Synth.trackCount).map { Double(min(1, synth.meters[$0] * 2.5)) }
         if zip(new, levels).contains(where: { abs($0 - $1) > 0.02 }) { levels = new }
+        for i in 0..<Synth.padCount where synth.padHits[i] != padHits[i] { padHits[i] = synth.padHits[i] }
         tickCount += 1
         if isRecording && tickCount % 3 == 0 {
             takeLevels.append(new.max() ?? 0)
