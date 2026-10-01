@@ -10,8 +10,8 @@ extension Style {
     }
 }
 
-/// Transport and knobs on the left; progression, keyboard and tracks on the right. The
-/// window's title and the style menu live in the native toolbar.
+/// Transport, knobs and recording on the left; progression, keyboard and tracks on the
+/// right. The window's title and the shortcuts help live in the native toolbar.
 struct ContentView: View {
     @Bindable var groove: Groove
     @State private var showShortcuts = false
@@ -22,6 +22,7 @@ struct ContentView: View {
                 VStack(spacing: 14) {
                     TransportCard(groove: groove)
                     KnobPanel(groove: groove)
+                    RecordCard(groove: groove)
                 }
                 .frame(width: 250)
                 .frame(maxHeight: .infinity)
@@ -44,27 +45,12 @@ struct ContentView: View {
                 Button {
                     showShortcuts.toggle()
                 } label: {
-                    Image(systemName: "info.circle")
+                    Image(systemName: "command")
                 }
                 .keyboardShortcut("/")
                 .help("Shortcuts and keyboard (⌘/)")
                 .accessibilityLabel("Shortcuts and keyboard")
                 .popover(isPresented: $showShortcuts, arrowEdge: .bottom) { ShortcutsView() }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Picker("Style", selection: $groove.style) {
-                        ForEach(Style.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    HStack(spacing: 8) {
-                        Text(groove.style.title)
-                        Image(systemName: "slider.horizontal.3")
-                    }
-                }
-                .menuIndicator(.hidden)
-                .help("Style")
             }
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -77,7 +63,7 @@ struct ContentView: View {
 // MARK: - Left
 
 private struct TransportCard: View {
-    let groove: Groove
+    @Bindable var groove: Groove
 
     var body: some View {
         HStack(spacing: 14) {
@@ -98,48 +84,127 @@ private struct TransportCard: View {
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
                     .contentTransition(.numericText())
                     .animation(.snappy, value: groove.currentChord)
-                if let started = groove.recordingStarted {
-                    TimelineView(.periodic(from: started, by: 1)) { ctx in
-                        let secs = max(0, Int(ctx.date.timeIntervalSince(started)))
-                        Text("REC \(secs / 60):\(String(format: "%02d", secs % 60))")
-                            .font(.callout.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(.red)
-                    }
-                } else {
-                    Text("\(Int(groove.bpm.rounded())) bpm · \(groove.style.keyName)")
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
+                Text("\(Int(groove.bpm.rounded())) bpm · \(groove.style.keyName)")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             Spacer(minLength: 0)
-            RecordButton(groove: groove)
+            Menu {
+                Picker("Style", selection: $groove.style) {
+                    ForEach(Style.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(.rect)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Style: \(groove.style.title)")
+            .accessibilityLabel("Style, \(groove.style.title)")
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
     }
 }
 
-/// Red dot that starts a take; while recording it pulses and stops the take.
-private struct RecordButton: View {
+/// Big record button, elapsed time and a live timeline of the take's levels.
+private struct RecordCard: View {
     let groove: Groove
 
     var body: some View {
-        Button {
-            groove.toggleRecording()
-        } label: {
-            Image(systemName: groove.isRecording ? "stop.circle.fill" : "record.circle")
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(.red)
-                .symbolEffect(.pulse, isActive: groove.isRecording)
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: 28, height: 28)
-                .contentShape(.circle)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Button {
+                    groove.toggleRecording()
+                } label: {
+                    Group {
+                        if groove.isRecording {
+                            RoundedRectangle(cornerRadius: 4).fill(.red).frame(width: 16, height: 16)
+                        } else {
+                            Circle().fill(.red).frame(width: 20, height: 20)
+                        }
+                    }
+                    .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)     // untinted, so the dot stays red
+                .disabled(groove.isSavingTake)
+                .help(groove.isRecording ? "Stop recording and save (⌘R)" : "Record (⌘R)")
+                .accessibilityLabel(groove.isRecording ? "Stop recording" : "Record")
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Record").font(.headline)
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(groove.isRecording ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                }
+                Spacer(minLength: 0)
+                elapsed
+            }
+            TakeTimeline(levels: groove.takeLevels, recording: groove.isRecording)
+                .frame(height: 30)
         }
-        .buttonStyle(.plain)
-        .help(groove.isRecording ? "Stop recording and save (⌘R)" : "Record (⌘R)")
-        .accessibilityLabel(groove.isRecording ? "Stop recording" : "Record")
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
+    }
+
+    private var status: String {
+        if groove.isRecording { return "Recording…" }
+        if groove.isSavingTake { return "Saving…" }
+        return groove.takeLevels.isEmpty ? "Ready" : "Last take"
+    }
+
+    @ViewBuilder private var elapsed: some View {
+        if let started = groove.recordingStarted {
+            TimelineView(.periodic(from: started, by: 1)) { ctx in
+                Self.clock(ctx.date.timeIntervalSince(started)).foregroundStyle(.red)
+            }
+        } else {
+            Self.clock(groove.lastTakeDuration).foregroundStyle(.secondary)
+        }
+    }
+
+    private static func clock(_ t: TimeInterval) -> some View {
+        let secs = max(0, Int(t))
+        return Text("\(secs / 60):\(String(format: "%02d", secs % 60))")
+            .font(.title3.weight(.semibold).monospacedDigit())
+    }
+}
+
+/// A row of dots: idle ones are small and grey; recorded ones grow with the take's level,
+/// red while recording and dimmed afterwards. Scrolls once the row is full.
+private struct TakeTimeline: View {
+    let levels: [Double]
+    let recording: Bool
+    private let count = 36
+
+    var body: some View {
+        let recent = Array(levels.suffix(count))
+        HStack(spacing: 0) {
+            ForEach(0..<count, id: \.self) { i in
+                Group {
+                    if i < recent.count {
+                        Capsule()
+                            .fill(recording ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                            .frame(width: 3.5, height: 4 + 24 * recent[i])
+                    } else {
+                        Circle().fill(.white.opacity(0.16)).frame(width: 4, height: 4)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(maxHeight: .infinity)
+        .animation(.linear(duration: 0.1), value: levels.count)
+        .accessibilityHidden(true)
     }
 }
 
@@ -247,7 +312,7 @@ private struct KnobPanel: View {
     @Bindable var groove: Groove
 
     var body: some View {
-        Grid(horizontalSpacing: 8, verticalSpacing: 18) {
+        Grid(horizontalSpacing: 6, verticalSpacing: 18) {
             GridRow {
                 Knob(title: "Tempo",
                      value: Binding(get: { (groove.bpm - 60) / 100 }, set: { groove.bpm = 60 + $0 * 100 }),
@@ -255,15 +320,13 @@ private struct KnobPanel: View {
                      defaultValue: (groove.style.defaults.bpm - 60) / 100)
                 Knob(title: "Swing", value: $groove.swing,
                      display: percent(groove.swing), defaultValue: groove.style.defaults.swing)
-            }
-            GridRow {
                 Knob(title: "Tone", value: $groove.tone,
                      display: groove.tone < 0.35 ? "Dark" : groove.tone > 0.8 ? "Open" : percent(groove.tone),
                      defaultValue: groove.style.defaults.tone)
-                Knob(title: "Grit", value: $groove.grit,
-                     display: percent(groove.grit), defaultValue: groove.style.defaults.grit)
             }
             GridRow {
+                Knob(title: "Grit", value: $groove.grit,
+                     display: percent(groove.grit), defaultValue: groove.style.defaults.grit)
                 Knob(title: "Space", value: $groove.space,
                      display: percent(groove.space), defaultValue: groove.style.defaults.space)
                 Knob(title: "Volume", value: $groove.volume,

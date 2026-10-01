@@ -42,6 +42,11 @@ final class Groove {
     private(set) var pattern: Pattern
     private(set) var isRecording = false
     private(set) var recordingStarted: Date?
+    /// True from stopping a take until it has been saved or discarded.
+    private(set) var isSavingTake = false
+    /// The current (or last) take's mix level, sampled 10× a second, for the timeline.
+    private(set) var takeLevels: [Double] = []
+    private(set) var lastTakeDuration: TimeInterval = 0
 
     var currentChord: String { pattern.chordNames[isPlaying ? bar : 0] }
 
@@ -55,8 +60,7 @@ final class Groove {
         componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0))
     @ObservationIgnored private var poll: Timer?
     @ObservationIgnored private let recorder = Recorder()
-    /// True while the reverb tail of a stopped take is still being captured.
-    @ObservationIgnored private var finishingTake = false
+    @ObservationIgnored private var tickCount = 0
 
     init() {
         var sr = engine.outputNode.outputFormat(forBus: 0).sampleRate
@@ -110,7 +114,7 @@ final class Groove {
 
     /// Records the final mix to a temporary WAV; playback starts with it.
     func startRecording() {
-        guard !isRecording, !finishingTake else { return }
+        guard !isRecording, !isSavingTake else { return }
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("Nocturne-\(UUID().uuidString).wav")
         do {
@@ -121,6 +125,7 @@ final class Groove {
         }
         isRecording = true
         recordingStarted = .now
+        takeLevels = []
         if !isPlaying { isPlaying = true }
     }
 
@@ -128,17 +133,18 @@ final class Groove {
     /// aren't chopped off, then `save` decides where it goes (nil asks with a save panel).
     func stopRecording(tail: Double = 2, save destination: URL? = nil) {
         guard isRecording else { return }
+        lastTakeDuration = recordingStarted.map { Date.now.timeIntervalSince($0) } ?? 0
         isRecording = false
         recordingStarted = nil
-        finishingTake = true
+        isSavingTake = true
         let stamp = DateFormatter()
         stamp.dateFormat = "yyyy-MM-dd HH.mm"
         let suggestedName = "Nocturne \(style.title) \(stamp.string(from: .now))"
         DispatchQueue.main.asyncAfter(deadline: .now() + tail) { [self] in
-            finishingTake = false
-            guard let take = recorder.stop(on: engine.mainMixerNode) else { return }
+            guard let take = recorder.stop(on: engine.mainMixerNode) else { isSavingTake = false; return }
             if let destination {
                 Groove.move(take, to: destination)
+                isSavingTake = false
             } else {
                 presentSavePanel(for: take, name: suggestedName)
             }
@@ -152,12 +158,13 @@ final class Groove {
         panel.nameFieldStringValue = name + ".wav"
         panel.directoryURL = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first
         panel.canCreateDirectories = true
-        let finish: (NSApplication.ModalResponse) -> Void = { response in
+        let finish: (NSApplication.ModalResponse) -> Void = { [weak self] response in
             if response == .OK, let dest = panel.url {
                 Groove.move(take, to: dest)
             } else {
                 try? FileManager.default.removeItem(at: take)
             }
+            self?.isSavingTake = false
         }
         if let window = NSApp.keyWindow ?? NSApp.windows.first {
             panel.beginSheetModal(for: window, completionHandler: finish)
@@ -219,5 +226,10 @@ final class Groove {
         if synth.uiBar != bar { bar = synth.uiBar }
         let new = (0..<Synth.trackCount).map { Double(min(1, synth.meters[$0] * 2.5)) }
         if zip(new, levels).contains(where: { abs($0 - $1) > 0.02 }) { levels = new }
+        tickCount += 1
+        if isRecording && tickCount % 3 == 0 {
+            takeLevels.append(new.max() ?? 0)
+            if takeLevels.count > 600 { takeLevels.removeFirst(takeLevels.count - 600) }
+        }
     }
 }

@@ -53,7 +53,7 @@ struct Knob: View {
                 .foregroundStyle(.primary.opacity(0.85))
                 .contentTransition(.numericText())
         }
-        .frame(minWidth: 76)
+        .frame(minWidth: 72)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(display)
