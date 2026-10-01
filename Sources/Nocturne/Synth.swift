@@ -277,6 +277,7 @@ final class Synth {
     private var samplesToNext: Float = 0
     private var noise = Noise()
     private var smoothGains = [Float](repeating: 0.8, count: Synth.trackCount)
+    private var smoothMaster: Float = 0.8
 
     private var kick = Kick(), snare = Snare(), hat = Hat(), openHat = Hat(), perc = Perc()
     private var bass = Bass()
@@ -448,8 +449,9 @@ final class Synth {
             }
             l = toneL.tick(l).lp
             r = toneR.tick(r).lp
-            outL[i] = tanhf(l * master)
-            outR[i] = tanhf(r * master)
+            smoothMaster += (master - smoothMaster) * 0.002     // no clicks on mute/volume jumps
+            outL[i] = tanhf(l * smoothMaster)
+            outR[i] = tanhf(r * smoothMaster)
         }
     }
 

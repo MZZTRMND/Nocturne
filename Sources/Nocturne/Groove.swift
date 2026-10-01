@@ -27,7 +27,9 @@ final class Groove {
     var tone: Double = 0.55 { didSet { synth.tone = Float(tone) } }
     var grit: Double = 0.15 { didSet { synth.grit = Float(grit) } }
     var space: Double = 0.45 { didSet { updateFX() } }
-    var volume: Double = 0.8 { didSet { synth.master = Float(volume) } }
+    var volume: Double = 0.8 { didSet { pushMaster() } }
+    /// Silences everything (playback and recordings) without touching the Volume knob.
+    var muteAll = false { didSet { pushMaster() } }
     var tracks: [Track] = [
         Track(id: 0, icon: "square.grid.3x3.fill"),
         Track(id: 1, icon: "waveform"),
@@ -85,7 +87,7 @@ final class Groove {
 
         loadStyle()
         pushGains()
-        synth.master = Float(volume)
+        pushMaster()
         do { try engine.start() } catch { NSLog("Nocturne: audio engine failed to start: \(error)") }
 
         poll = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
@@ -216,6 +218,8 @@ final class Groove {
         delay.wetDryMix = Float(space * [30, 12, 35][style.rawValue])     // dub delay for trip-hop and techno
         delay.delayTime = 0.75 * 60 / bpm      // dotted eighth
     }
+
+    private func pushMaster() { synth.master = muteAll ? 0 : Float(volume) }
 
     private func pushGains() {
         for t in tracks { synth.gains[t.id] = t.muted ? 0 : Float(t.volume) }

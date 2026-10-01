@@ -43,6 +43,17 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    groove.muteAll.toggle()
+                } label: {
+                    Image(systemName: groove.muteAll ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .help(groove.muteAll ? "Unmute all (⇧⌘M)" : "Mute all (⇧⌘M)")
+                .accessibilityLabel(groove.muteAll ? "Unmute all" : "Mute all")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
                     showShortcuts.toggle()
                 } label: {
                     Image(systemName: "command")
@@ -262,6 +273,7 @@ private struct MixerRow: View {
     }
 }
 
+/// Click anywhere on the card (outside the slider) to mute or unmute the track.
 private struct TrackCard: View {
     @Binding var track: Track
     let name: String
@@ -282,27 +294,29 @@ private struct TrackCard: View {
                     .lineLimit(1)
                     .contentTransition(.opacity)
                 Spacer(minLength: 2)
-                Button {
-                    track.muted.toggle()
-                } label: {
-                    Image(systemName: track.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .foregroundStyle(track.muted ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 20, height: 20)
-                        .contentShape(.rect)
+                if track.muted {
+                    Text("Muted")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .transition(.opacity)
                 }
-                .buttonStyle(.plain)
-                .help(track.muted ? "Unmute \(name)" : "Mute \(name)")
-                .accessibilityLabel(track.muted ? "Unmute \(name)" : "Mute \(name)")
             }
             Slider(value: $track.volume, in: 0...1)
                 .controlSize(.small)
                 .disabled(track.muted)
                 .accessibilityLabel("\(name) volume")
         }
+        .opacity(track.muted ? 0.5 : 1)
         .padding(12)
-        .glassEffect(.regular.tint(track.muted ? .clear : accent.opacity(0.06 + 0.16 * level)),
+        .contentShape(.rect(cornerRadius: 22))
+        .onTapGesture { withAnimation(.snappy) { track.muted.toggle() } }
+        .glassEffect(.regular.tint(track.muted ? .clear : accent.opacity(0.06 + 0.16 * level)).interactive(),
                      in: .rect(cornerRadius: 22))
+        .help(track.muted ? "Click to unmute \(name)" : "Click to mute \(name)")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(track.muted ? "\(name), muted" : name)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: track.muted ? "Unmute" : "Mute") { track.muted.toggle() }
     }
 }
 

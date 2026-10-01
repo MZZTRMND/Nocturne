@@ -5,6 +5,7 @@ struct ShortcutsView: View {
     private let shortcuts: [(keys: [String], action: String)] = [
         (["Space"], "Play / Stop"),
         (["⌘", "R"], "Record / stop recording"),
+        (["⇧", "⌘", "M"], "Mute / unmute all"),
         (["⌘", "1"], "Trip-Hop"),
         (["⌘", "2"], "Industrial"),
         (["⌘", "3"], "Techno"),
@@ -50,6 +51,11 @@ struct ShortcutsView: View {
                 }
                 Text("Plays C4 – E5 with the current keys sound.")
                     .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            section("Tracks") {
+                Text("Click a track card to mute it.")
                     .foregroundStyle(.secondary)
             }
 
