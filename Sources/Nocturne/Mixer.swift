@@ -28,29 +28,28 @@ private struct ChannelStrip: View {
     let accent: Color
 
     var body: some View {
-        VStack(spacing: 10) {
+        // Same type treatment as the knobs: grey title on top, white value underneath.
+        VStack(spacing: 8) {
+            Text(name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity)
+                .contentShape(.rect)
+                .onTapGesture { withAnimation(.snappy) { track.muted.toggle() } }
+                .help(track.muted ? "Click to unmute \(name)" : "Click to mute \(name)")
+                .accessibilityLabel(track.muted ? "\(name), muted" : name)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction(named: track.muted ? "Unmute" : "Mute") { track.muted.toggle() }
+
             Fader(value: $track.volume, level: track.muted ? 0 : level, accent: accent, name: name)
                 .opacity(track.muted ? 0.4 : 1)
 
-            VStack(spacing: 2) {
-                Text(name)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .foregroundStyle(track.muted ? .secondary : .primary)
-                Text(track.muted ? "Muted" : "\(Int((track.volume * 100).rounded()))%")
-                    .font(.caption2.weight(.medium).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(.rect)
-            .onTapGesture { withAnimation(.snappy) { track.muted.toggle() } }
-            .help(track.muted ? "Click to unmute \(name)" : "Click to mute \(name)")
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(track.muted ? "\(name), muted" : name)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction(named: track.muted ? "Unmute" : "Mute") { track.muted.toggle() }
+            Text(track.muted ? "Muted" : "\(Int((track.volume * 100).rounded()))%")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.primary.opacity(track.muted ? 0.5 : 0.85))
+                .contentTransition(.numericText())
         }
         .frame(maxWidth: .infinity)
     }
