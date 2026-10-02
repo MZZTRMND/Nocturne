@@ -57,6 +57,23 @@ struct ContentView: View {
             .sharedBackgroundVisibility(.hidden)
             // Without the system title nothing pushes the buttons right; this does.
             ToolbarSpacer(.flexible)
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Picker("Style", selection: $groove.style) {
+                        ForEach(Style.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.note.list")
+                        Text(groove.style.title)
+                    }
+                }
+                .menuIndicator(.hidden)
+                .help("Style preset: \(groove.style.title)")
+                .accessibilityLabel("Style preset, \(groove.style.title)")
+            }
+            ToolbarSpacer(.fixed)
             // Manual sits on its own, apart from the Mute All + shortcuts pair.
             ToolbarItem(placement: .primaryAction) {
                 Toggle(isOn: $groove.manual) {
@@ -127,24 +144,6 @@ private struct TransportCard: View {
                     .minimumScaleFactor(0.8)
             }
             Spacer(minLength: 0)
-            Menu {
-                Picker("Style", selection: $groove.style) {
-                    ForEach(Style.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.inline)
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(.rect)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("Style: \(groove.style.title)")
-            .accessibilityLabel("Style, \(groove.style.title)")
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
@@ -185,11 +184,15 @@ private struct RecordCard: View {
                 Spacer(minLength: 0)
                 elapsed
             }
-            TakeTimeline(levels: groove.takeLevels, recording: groove.isRecording)
-                .frame(height: 30)
+            if groove.isRecording {
+                TakeTimeline(levels: groove.takeLevels, recording: true)
+                    .frame(height: 30)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
+        .animation(.smooth(duration: 0.3), value: groove.isRecording)
     }
 
     private var status: String {
