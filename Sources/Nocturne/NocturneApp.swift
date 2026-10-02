@@ -8,6 +8,10 @@ struct NocturneApp: App {
 
     init() {
         let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--prompt-test"), i + 1 < args.count {
+            PromptTest.run(args[i + 1])
+            exit(0)
+        }
         if let i = args.firstIndex(of: "--render-test") {
             RenderTest.run(into: i + 1 < args.count ? args[i + 1] : ".")
             exit(0)
@@ -23,7 +27,8 @@ struct NocturneApp: App {
         .commands {
             CommandMenu("Playback") {
                 Button(groove.isPlaying ? "Stop" : "Play") { groove.isPlaying.toggle() }
-                    .keyboardShortcut(.space, modifiers: [])
+                    // Off while typing a prompt, or Space couldn't be typed.
+                    .keyboardShortcut(groove.promptFocused ? nil : KeyboardShortcut(.space, modifiers: []))
                 Button(groove.isRecording ? "Stop Recording" : "Record") { groove.toggleRecording() }
                     .keyboardShortcut("r")
                 Divider()
@@ -51,7 +56,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // `--snapshot-shortcuts` renders the help popover's content on its own.
             let content = args.contains("--snapshot-shortcuts")
                 ? AnyView(ShortcutsView().background(Color(white: 0.16)))
-                : AnyView(ContentView(groove: Groove()))
+                : AnyView(ContentView(groove: {
+                    let g = Groove()
+                    g.manual = args.contains("--snapshot-manual")
+                    return g
+                }()))
             let renderer = ImageRenderer(content: content.environment(\.colorScheme, .dark))
             renderer.scale = 2
             if let cg = renderer.cgImage {
@@ -74,6 +83,19 @@ enum RecordTest {
               let bar = spec.firstIndex(of: "|"),
               let seconds = Double(spec[..<bar]) else { return }
         let dest = URL(fileURLWithPath: String(spec[spec.index(after: bar)...]))
+        // Optional: NOCTURNE_COMPOSE="<prompt>" runs the prompt first, through the real UI path.
+        if let prompt = ProcessInfo.processInfo.environment["NOCTURNE_COMPOSE"] {
+            groove.compose(prompt)
+            while groove.isComposing { try? await Task.sleep(for: .milliseconds(100)) }
+            let notes = dest.deletingPathExtension().appendingPathExtension("txt")
+            let r = groove.recipe
+            let summary = """
+            note: \(groove.composeNote ?? "-")
+            manual: \(groove.manual) · \(Int(groove.bpm)) bpm · \(groove.pattern.keyName) · drums \(r.drums?.title ?? "off") · bass \(r.bassSound?.bassSoundTitle ?? "off") · keys \(r.keys?.keysTitle ?? "off") · enters \(r.enter.map { $0 + 1 })
+            """
+            try? summary.write(to: notes, atomically: true, encoding: .utf8)
+            groove.isPlaying = false
+        }
         groove.startRecording()
         try? await Task.sleep(for: .seconds(seconds))
         groove.stopRecording(tail: 1, save: dest)
@@ -82,10 +104,33 @@ enum RecordTest {
     }
 }
 
+/// `--prompt-test "<text>"`: runs the prompt through the interpreter and prints the result.
+enum PromptTest {
+    static func run(_ prompt: String) {
+        if let reason = AppleInterpreter.unavailableReason { print(reason); return }
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            do {
+                let spec = try await AppleInterpreter().interpret(prompt)
+                let r = spec.recipe
+                print("plan:", spec.plan)
+                print("bpm \(spec.bpm) · \(r.keyName) · harmony \(r.harmony.harmonyTitle) · darkness \(spec.darkness) · distortion \(spec.distortion) · space \(spec.space)")
+                print("drums \(r.drums?.title ?? "off") (\(r.kit.kitTitle) kit) · sub \(r.sub) · bass \(r.bassSound?.bassSoundTitle ?? "off") \(r.bassPattern.bassPatternTitle) · keys \(r.keys?.keysTitle ?? "off") · texture \(r.texture?.textureTitle ?? "off")")
+                print("enters on bar (drums, sub, bass, keys, texture):", r.enter.map { $0 + 1 })
+            } catch {
+                print("error:", error)
+            }
+            done.signal()
+        }
+        done.wait()
+    }
+}
+
 /// Offline render of every style to WAV, printing levels: a quick sanity check of the DSP
 /// without needing to listen. `Nocturne --render-test <dir>`
 enum RenderTest {
     static func run(into dir: String) {
+        introReport()
         for style in Style.allCases {
             let (l, r) = render(style, gains: [0.8, 0.8, 0.8, 0.8, 0.8])
             let drums = render(style, gains: [0.8, 0, 0, 0, 0]).0
@@ -102,6 +147,32 @@ enum RenderTest {
             }
             print("            per track dB: " + parts.joined(separator: " · "))
         }
+    }
+
+    /// A mixed recipe with an intro build: prints the level of each of 8 bars.
+    static func introReport() {
+        var r = Recipe.preset(.industrial)
+        r.drums = .breakbeat
+        r.keys = .dreamy
+        r.enter = [2, 1, 2, 0, 0]       // keys + texture, then sub, then drums and bass
+        let synth = Synth(sampleRate: 44_100, pattern: Pattern.make(r, seed: 7))
+        synth.bpm = 90; synth.grit = 0.4; synth.tone = 0.5
+        synth.playing = true
+        let barLen = Int(44_100 * 60 / Float(90) * 4)
+        var line = "Intro (keys+texture → +sub at bar 2 → +drums & bass at bar 3), dB per bar:"
+        for _ in 0..<8 {
+            var l = [Float](repeating: 0, count: barLen), rr = l
+            var at = 0
+            while at < barLen {
+                let n = min(512, barLen - at)
+                l.withUnsafeMutableBufferPointer { lp in
+                    rr.withUnsafeMutableBufferPointer { rp in synth.render(n, lp.baseAddress! + at, rp.baseAddress! + at) }
+                }
+                at += n
+            }
+            line += String(format: " %.1f", db(rms(l)))
+        }
+        print(line)
     }
 
     private static func render(_ style: Style, gains: [Float]) -> ([Float], [Float]) {

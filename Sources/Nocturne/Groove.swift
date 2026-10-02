@@ -13,8 +13,33 @@ struct Track: Identifiable {
 @MainActor @Observable
 final class Groove {
     var style: Style = .tripHop {
-        didSet { if style != oldValue { loadStyle() } }
+        didSet {
+            guard style != oldValue else { return }
+            if manual { manualRecipe = .preset(style) }     // picking a style starts manual from it
+            loadStyle()
+        }
     }
+    /// Manual mode: every part is set by hand (or by a prompt) instead of by the style.
+    var manual = false {
+        didSet {
+            guard manual != oldValue else { return }
+            if manual && !hasManualRecipe { manualRecipe = .preset(style); hasManualRecipe = true }
+            rebuild()
+        }
+    }
+    /// The hand-made setup; kept while manual mode is off so switching back restores it.
+    var manualRecipe: Recipe = .preset(.tripHop) {
+        didSet { if manual && manualRecipe != oldValue { rebuild() } }
+    }
+    var recipe: Recipe { manual ? manualRecipe : .preset(style) }
+
+    /// The prompt is being interpreted.
+    private(set) var isComposing = false
+    /// What the last prompt came up with, or why it failed.
+    private(set) var composeNote: String?
+    private(set) var composeFailed = false
+    /// The prompt field has focus, so bare-key shortcuts (Space) must leave it alone.
+    var promptFocused = false
     var isPlaying = false {
         didSet {
             synth.playing = isPlaying
@@ -52,6 +77,9 @@ final class Groove {
     var currentChord: String { pattern.chordNames[isPlaying ? bar : 0] }
 
     @ObservationIgnored let synth: Synth
+    @ObservationIgnored private var seed: UInt64 = .random(in: 0...UInt64.max)
+    @ObservationIgnored private var hasManualRecipe = false
+    @ObservationIgnored private let interpreter: PromptInterpreter = AppleInterpreter()
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private let delay = AVAudioUnitDelay()
     @ObservationIgnored private let reverb = AVAudioUnitReverb()
@@ -188,12 +216,54 @@ final class Groove {
 
     // MARK: Pattern
 
-    private func loadPattern() {
-        pattern = Pattern.make(style, seed: .random(in: 0...UInt64.max))
+    /// Regenerates the pattern from the current recipe, keeping the random seed so
+    /// changing one part doesn't reshuffle the others.
+    private func rebuild() {
+        pattern = Pattern.make(recipe, seed: seed)
         synth.setPattern(pattern)
+        reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral, .mediumHall][recipe.main.rawValue])
+        updateFX()
     }
 
-    func trackName(_ i: Int) -> String { style.trackNames[i] }
+    func trackName(_ i: Int) -> String {
+        manual ? ["Drums", "Sub", "Bass", "Keys", "Texture"][i] : style.trackNames[i]
+    }
+
+    // MARK: Prompt
+
+    /// Interprets a description, switches to manual mode with the result and plays it
+    /// from the top so a build-up is heard.
+    func compose(_ prompt: String) {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isComposing else { return }
+        if let reason = AppleInterpreter.unavailableReason {
+            composeNote = reason
+            composeFailed = true
+            return
+        }
+        isComposing = true
+        composeNote = nil
+        Task {
+            defer { isComposing = false }
+            do {
+                let spec = try await interpreter.interpret(text)
+                seed = .random(in: 0...UInt64.max)
+                hasManualRecipe = true
+                if manual { manualRecipe = spec.recipe } else { manualRecipe = spec.recipe; manual = true }
+                bpm = Double(spec.bpm)
+                swing = spec.recipe.drums == .breakbeat ? 0.1 : spec.recipe.kit.defaults.swing
+                tone = spec.tone
+                grit = spec.grit
+                space = spec.spaceAmount
+                composeNote = spec.plan
+                composeFailed = false
+                if isPlaying { synth.restart() } else { isPlaying = true }
+            } catch {
+                composeNote = "Couldn't create that: \(error.localizedDescription)"
+                composeFailed = true
+            }
+        }
+    }
 
     /// Notes of the chord currently sounding (bar 1's chord while stopped).
     var chordNotes: Set<Int> { Set(pattern.chords[isPlaying ? bar : 0]) }
@@ -207,14 +277,14 @@ final class Groove {
         swing = d.swing
         tone = d.tone
         grit = d.grit
-        reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral, .mediumHall][style.rawValue])
         space = d.space
-        loadPattern()
+        seed = .random(in: 0...UInt64.max)
+        rebuild()
     }
 
     private func updateFX() {
         reverb.wetDryMix = Float(space * 55)
-        delay.wetDryMix = Float(space * [30, 12, 35, 15][style.rawValue])     // dub delay for trip-hop and dreamy
+        delay.wetDryMix = Float(space * [30, 12, 35, 15][recipe.main.rawValue])     // dub delay for trip-hop and dreamy
         delay.delayTime = 0.75 * 60 / bpm      // dotted eighth
     }
 

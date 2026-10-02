@@ -273,6 +273,9 @@ final class Synth {
     var tone: Float = 0.5
     var grit: Float = 0.2
     var master: Float = 0.8
+    /// Set from the main thread to jump back to bar 1 (e.g. to hear a new intro).
+    private var restartRequested = false
+    func restart() { restartRequested = true }
     /// Target gain per track: drums, sub, bass, keys, texture. 0 when muted.
     static let trackCount = 5
     let gains = UnsafeMutablePointer<Float>.allocate(capacity: Synth.trackCount)
@@ -303,6 +306,9 @@ final class Synth {
     private var liveNote = [Int](repeating: -1, count: 10)
     private var nextPanLeft = true
     private var kickFollow: Float = 0
+    /// Bars since playback started (not wrapped), for the intro arrangement.
+    private var songBar = 0
+    private var texGain: Float = 1
 
     private var keysL = SVF(), keysR = SVF(), toneL = SVF(), toneR = SVF()
     private var hissLP = SVF(), droneBP = SVF(), rumbleLP = SVF(), airBP = SVF()
@@ -356,14 +362,22 @@ final class Synth {
         let isOn = playing
         if isOn && !wasPlaying { globalStep = 0; samplesToNext = 0 }
         if !isOn && wasPlaying { releaseAll(); uiStep = -1 }
+        if restartRequested {
+            restartRequested = false
+            if isOn { globalStep = 0; samplesToNext = 0; songBar = 0; releaseAll() }
+        }
         wasPlaying = isOn
 
-        let style = pattern.style
+        // Each part can use a different style's sound (manual mode); `main` sets the
+        // overall balance.
+        let main = pattern.style, kitS = pattern.kit, bassS = pattern.bassSound
+        let keysS = pattern.keysSound, texS = pattern.textureSound
+        let texTarget: Float = pattern.hasTexture && (!isOn || songBar >= pattern.enter[4]) ? 1 : 0
         let cutoff = 250 * powf(80, min(max(tone, 0), 1))
         toneL.set(cutoff, k: 1.1, sr: sr)
         toneR.set(cutoff, k: 1.1, sr: sr)
         let sweep = 0.5 + 0.5 * sinf(twoPi * lfoSlow)
-        switch style {
+        switch keysS {
         case .tripHop: keysL.set(1400, k: 0.9, sr: sr)
         case .industrial: keysL.set(300 + 1800 * sweep, k: 0.3, sr: sr)
         case .dreamy: keysL.set(1100 + 700 * sweep, k: 0.8, sr: sr)
@@ -382,57 +396,56 @@ final class Synth {
             for j in 0..<Synth.trackCount { smoothGains[j] += (gains[j] - smoothGains[j]) * 0.002 }
 
             // Drums
-            let k = kick.next(style, dt, noise.next()) * 1.35
-            let sn = snare.next(style, dt, noise.next()) * 0.9
+            let k = kick.next(kitS, dt, noise.next()) * 1.35
+            let sn = snare.next(kitS, dt, noise.next()) * 0.9
             let hh = hat.next(dt, noise.next()) * 0.4
             let oh = openHat.next(dt, noise.next()) * 0.32
-            let pc = perc.next(style, dt, noise.next()) * 0.45
-            let dScale: Float = [1, 1, 0.7, 0.8][style.rawValue]   // ambient styles: drums sit behind
+            let pc = perc.next(kitS, dt, noise.next()) * 0.45
+            let dScale: Float = [1, 1, 0.7, 0.8][kitS.rawValue]   // ambient styles: drums sit behind
             let dL = (k + sn + hh * 0.7 + oh * 0.7 + pc * 1.2) * smoothGains[0] * dScale
             let dR = (k + sn + hh * 1.3 + oh * 1.3 + pc * 0.8) * smoothGains[0] * dScale
 
             // Everything else ducks under the kick, so it punches through the mix.
             kickFollow = max(abs(k) * smoothGains[0], kickFollow * 0.9993)
-            let duck = 1 - [0.4, 0.4, 0.2, 0.25][style.rawValue] * min(kickFollow, 1)
+            let duck = 1 - [0.4, 0.4, 0.2, 0.25][kitS.rawValue] * min(kickFollow, 1)
 
-            // Tape wow and flutter: a slow, slightly seasick warble on dreamy's melodic parts.
-            var pitch: Float = 1
-            if style == .dreamy {
-                wowPh += 0.35 * dt; wrap(&wowPh)
-                flutterPh += 6 * dt; wrap(&flutterPh)
-                pitch = 1 + 0.0035 * sinf(twoPi * wowPh) + 0.0008 * sinf(twoPi * flutterPh)
-            }
+            // Tape wow and flutter: a slow, slightly seasick warble on dreamy-sounding parts.
+            wowPh += 0.35 * dt; wrap(&wowPh)
+            flutterPh += 6 * dt; wrap(&flutterPh)
+            let wobble = 1 + 0.0035 * sinf(twoPi * wowPh) + 0.0008 * sinf(twoPi * flutterPh)
+            let keysPitch: Float = keysS == .dreamy ? wobble : 1
+            let linePitch: Float = bassS == .dreamy ? wobble : 1
 
             // Sub + bass line
-            let b = bass.next(dt, atk: atk, rel: rel) * 0.42 * [1, 1, 1, 0.5][style.rawValue] * smoothGains[1] * duck
-            let ln = line.next(style, dt, sr: sr, atk: atk, rel: rel, pitch: pitch) * 0.4 * [1, 1, 2.7, 1.8][style.rawValue] * smoothGains[2] * duck
+            let b = bass.next(dt, atk: atk, rel: rel) * 0.42 * [1, 1, 1, 0.5][main.rawValue] * smoothGains[1] * duck
+            let ln = line.next(bassS, dt, sr: sr, atk: atk, rel: rel, pitch: linePitch) * 0.4 * [1, 1, 2.7, 1.8][bassS.rawValue] * smoothGains[2] * duck
 
             // Keys: the pattern's chords plus anything played live
             var kL: Float = 0, kR: Float = 0
             for v in 0..<keys.count where keys[v].on {
-                let s = keys[v].next(style, dt, pitch: pitch) * 0.11
+                let s = keys[v].next(keysS, dt, pitch: keysPitch) * 0.11
                 kL += s * (1 - keys[v].pan)
                 kR += s * (1 + keys[v].pan)
             }
             for v in 0..<live.count where live[v].on {
-                let s = live[v].next(style, dt, pitch: pitch) * 0.16
+                let s = live[v].next(keysS, dt, pitch: keysPitch) * 0.16
                 kL += s
                 kR += s
             }
             kL = keysL.tick(kL).lp
             kR = keysR.tick(kR).lp
-            if style == .tripHop {
+            if keysS == .tripHop {
                 let tr = sinf(twoPi * lfoTrem)
                 kL *= 1 - 0.25 * (0.5 + 0.5 * tr)
                 kR *= 1 - 0.25 * (0.5 - 0.5 * tr)
             }
-            let kScale: Float = [2.9, 1, 2.8, 3.2][style.rawValue]
+            let kScale: Float = [2.9, 1, 2.8, 3.2][keysS.rawValue]
             kL *= smoothGains[3] * duck * kScale
             kR *= smoothGains[3] * duck * kScale
 
             // Texture
             var tx: Float
-            switch style {
+            switch texS {
             case .industrial:
                 droneF += (droneTarget - droneF) * 0.0005
                 dronePh += droneF * dt; wrap(&dronePh)
@@ -454,7 +467,8 @@ final class Synth {
                 let drone = rumbleLP.tick(2 * dronePh - 1).lp * 0.12 + droneBP.tick(noise.next()).bp * 0.025
                 tx = crackle * noise.next() + hissLP.tick(noise.next()).lp * 0.02 + drone
             }
-            tx *= smoothGains[4] * (style == .synth ? 0.5 : 1)
+            texGain += (texTarget - texGain) * 0.0005      // texture fades in when it enters
+            tx *= smoothGains[4] * (texS == .synth ? 0.5 : 1) * texGain
 
             lfoSlow += 0.06 * dt; wrap(&lfoSlow)
             lfoTrem += 4.2 * dt; wrap(&lfoTrem)
@@ -480,32 +494,26 @@ final class Synth {
     }
 
     private func fireStep() {
-        let bar = (globalStep / 16) % 4, s = globalStep % 16
-        let style = pattern.style
+        songBar = globalStep / 16
+        let bar = songBar % 4, s = globalStep % 16
+        let kitS = pattern.kit
+        // Intro arrangement: a part stays silent until its entry bar.
+        let drumsIn = songBar >= pattern.enter[0], subIn = songBar >= pattern.enter[1]
+        let bassIn = songBar >= pattern.enter[2], keysIn = songBar >= pattern.enter[3]
         let base = sr * 60 / max(bpm, 30) / 4
         let human = 0.92 + 0.08 * noise.next()
 
-        if pattern.kick[bar][s] > 0 { kick.trigger(pattern.kick[bar][s] * human) }
-        if pattern.snare[bar][s] > 0 { snare.trigger(pattern.snare[bar][s] * human, style, sr: sr) }
-        if pattern.hat[bar][s] > 0 {
-            hat.trigger(pattern.hat[bar][s] * human, decay: [45, 50, 65, 80][style.rawValue],
-                        cutoff: style == .tripHop ? 6000 : 7500, sr: sr)
-            openHat.choke()
-        }
-        if pattern.open[bar][s] > 0 {
-            openHat.trigger(pattern.open[bar][s] * human, decay: [9, 12, 10, 14][style.rawValue], cutoff: 7000, sr: sr)
-        }
-        if pattern.perc[bar][s] > 0 { perc.trigger(pattern.perc[bar][s] * human, sr: sr) }
-        if let h = pattern.bass[bar][s] {
+        if drumsIn { fireDrums(bar, s, kitS, human) }
+        if subIn, let h = pattern.bass[bar][s] {
             bass.trigger(mtof(h.midi), samples: Int(Float(h.len) * base * 0.92), vel: h.vel)
         }
-        if let h = pattern.line[bar][s] {
+        if bassIn, let h = pattern.line[bar][s] {
             line.trigger(mtof(h.midi), samples: Int(Float(h.len) * base * 0.92), vel: h.vel)
         }
-        if let h = pattern.melody[bar][s] {
+        if keysIn, let h = pattern.melody[bar][s] {
             triggerKey(h.midi, samples: Int(Float(h.len) * base * 0.95), vel: h.vel)
         }
-        if let h = pattern.comp[bar][s] {
+        if keysIn, let h = pattern.comp[bar][s] {
             let len = Int(Float(h.len) * base * 0.95)
             for m in pattern.chords[bar] {
                 triggerKey(m, samples: len, vel: h.vel * (0.85 + 0.15 * noise.next()))
@@ -517,6 +525,20 @@ final class Synth {
         uiBar = bar
         globalStep += 1
         samplesToNext += base * (globalStep % 2 == 1 ? 1 + swing / 3 : 1 - swing / 3)
+    }
+
+    private func fireDrums(_ bar: Int, _ s: Int, _ kitS: Style, _ human: Float) {
+        if pattern.kick[bar][s] > 0 { kick.trigger(pattern.kick[bar][s] * human) }
+        if pattern.snare[bar][s] > 0 { snare.trigger(pattern.snare[bar][s] * human, kitS, sr: sr) }
+        if pattern.hat[bar][s] > 0 {
+            hat.trigger(pattern.hat[bar][s] * human, decay: [45, 50, 65, 80][kitS.rawValue],
+                        cutoff: kitS == .tripHop ? 6000 : 7500, sr: sr)
+            openHat.choke()
+        }
+        if pattern.open[bar][s] > 0 {
+            openHat.trigger(pattern.open[bar][s] * human, decay: [9, 12, 10, 14][kitS.rawValue], cutoff: 7000, sr: sr)
+        }
+        if pattern.perc[bar][s] > 0 { perc.trigger(pattern.perc[bar][s] * human, sr: sr) }
     }
 
     private func triggerKey(_ midi: Int, samples: Int, vel: Float) {

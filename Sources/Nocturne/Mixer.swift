@@ -11,7 +11,8 @@ struct FaderPanel: View {
                 ChannelStrip(track: $track,
                              name: groove.trackName(track.id),
                              level: groove.levels[track.id],
-                             accent: groove.style.accent)
+                             accent: groove.style.accent,
+                             groove: groove)
                     .padding(.vertical, 14)
                     .frame(maxHeight: .infinity)
                     .glassEffect(.regular.tint(track.muted ? .clear : groove.style.accent.opacity(0.04 + 0.12 * groove.levels[track.id])),
@@ -26,6 +27,7 @@ private struct ChannelStrip: View {
     let name: String
     let level: Double
     let accent: Color
+    let groove: Groove
 
     var body: some View {
         // Same type treatment as the knobs: grey title on top, white value underneath.
@@ -42,6 +44,11 @@ private struct ChannelStrip: View {
                 .accessibilityLabel(track.muted ? "\(name), muted" : name)
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction(named: track.muted ? "Unmute" : "Mute") { track.muted.toggle() }
+
+            if groove.manual {
+                ChannelControls(groove: groove, track: track.id)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             Fader(value: $track.volume, level: track.muted ? 0 : level, accent: accent, name: name)
                 .opacity(track.muted ? 0.4 : 1)

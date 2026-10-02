@@ -55,6 +55,12 @@ struct ShortcutsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            section("Prompt & manual mode") {
+                Text("Describe a sound in the prompt bar and press Return — the on-device model sets up every part and plays it from the top. Switch on Manual to change each part's sound, pattern and the bar it comes in on.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             section("Faders") {
                 Text("Drag to set a track's level. Double-click resets it. Click a track's name to mute it.")
                     .foregroundStyle(.secondary)

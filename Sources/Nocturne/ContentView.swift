@@ -29,10 +29,11 @@ struct ContentView: View {
                 .frame(maxHeight: .infinity)
 
                 VStack(spacing: 14) {
+                    ComposeBar(groove: groove)
                     ProgressionPanel(groove: groove)
                     PianoPanel(groove: groove)
                     FaderPanel(groove: groove)
-                        .frame(height: 170)
+                        .frame(height: groove.manual ? 268 : 170)
                 }
                 .frame(maxHeight: .infinity)
             }
@@ -78,6 +79,7 @@ struct ContentView: View {
         .tint(groove.style.accent)
         .preferredColorScheme(.dark)
         .animation(.smooth(duration: 0.5), value: groove.style)
+        .animation(.smooth(duration: 0.35), value: groove.manual)
     }
 }
 
@@ -105,7 +107,7 @@ private struct TransportCard: View {
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
                     .contentTransition(.numericText())
                     .animation(.snappy, value: groove.currentChord)
-                Text("\(Int(groove.bpm.rounded())) bpm · \(groove.style.keyName)")
+                Text("\(Int(groove.bpm.rounded())) bpm · \(groove.pattern.keyName)")
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -236,6 +238,10 @@ private struct ProgressionPanel: View {
     var body: some View {
         let p = groove.pattern
         HStack(spacing: 22) {
+            if groove.manual {
+                HarmonyControls(groove: groove)
+                Divider().frame(height: 40)
+            }
             ForEach(0..<4, id: \.self) { b in
                 let isCurrentBar = groove.isPlaying && groove.bar == b
                 VStack(alignment: .leading, spacing: 7) {

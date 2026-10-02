@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Style
 
-enum Style: Int, CaseIterable, Identifiable {
+enum Style: Int, CaseIterable, Identifiable, Codable {
     case tripHop, industrial, dreamy, synth
 
     var id: Int { rawValue }
@@ -79,7 +79,6 @@ enum Quality {
     }
 }
 
-private let noteNames = ["C", "D♭", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"]
 
 private func progressions(_ style: Style) -> [[(Int, Quality)]] {
     switch style {
@@ -140,7 +139,14 @@ struct Hit {
 /// `line` the audible bass part, `comp` the rhythm of the keys' chords, `melody` single
 /// notes on the keys sound.
 struct Pattern {
+    /// The main style: harmony, reverb and overall balance.
     let style: Style
+    /// Which style's sound each part uses (they can differ in manual mode).
+    var kit: Style, bassSound: Style, keysSound: Style, textureSound: Style
+    var hasTexture = true
+    /// Bar each track enters on (drums, sub, bass, keys, texture); later bars loop all in.
+    var enter = [0, 0, 0, 0, 0]
+    var keyName = ""
     var kick = Pattern.lane(), snare = Pattern.lane(), hat = Pattern.lane()
     var open = Pattern.lane(), perc = Pattern.lane()
     var bass = Pattern.notes(), line = Pattern.notes(), comp = Pattern.notes(), melody = Pattern.notes()
@@ -152,26 +158,61 @@ struct Pattern {
     static func notes() -> [[Hit?]] { Array(repeating: Array(repeating: nil, count: 16), count: 4) }
 
     static func make(_ style: Style, seed: UInt64) -> Pattern {
+        make(.preset(style), seed: seed)
+    }
+
+    /// Builds each part with its own style's writer over one shared progression. Each
+    /// part draws from its own random stream, so changing one part leaves the rest as is.
+    static func make(_ recipe: Recipe, seed: UInt64) -> Pattern {
         var r = RNG(seed: seed)
-        var p = Pattern(style: style)
-        for (root, q) in r.pick(progressions(style)) {
-            var base = style.keyRoot + root
+        var p = Pattern(style: recipe.harmony,
+                        kit: recipe.kit, bassSound: recipe.bassSound ?? recipe.harmony,
+                        keysSound: recipe.keys ?? recipe.harmony,
+                        textureSound: recipe.texture ?? recipe.harmony)
+        p.hasTexture = recipe.texture != nil
+        p.enter = recipe.enter
+        p.keyName = recipe.keyName
+
+        // Keep the key's root near the style's own register.
+        var keyRoot = recipe.harmony.keyRoot - recipe.harmony.keyRoot % 12 + recipe.key
+        if keyRoot - recipe.harmony.keyRoot > 6 { keyRoot -= 12 }
+        for (root, q) in r.pick(progressions(recipe.harmony)) {
+            var base = keyRoot + root
             // Keeps every voicing inside the on-screen keyboard (C3–E5).
             while base > 59 { base -= 12 }
             while base < 48 { base += 12 }
             p.chords.append(q.intervals.map { base + $0 })
 
-            var b = style.keyRoot + root - 24
+            var b = keyRoot + root - 24
             while b < 31 { b += 12 }
             while b > 42 { b -= 12 }
             p.bassRoots.append(b)
-            p.chordNames.append(noteNames[(style.keyRoot + root) % 12] + q.suffix)
+            p.chordNames.append(noteNames[((keyRoot + root) % 12 + 12) % 12] + q.suffix)
         }
-        switch style {
-        case .tripHop: p.writeTripHop(&r)
-        case .industrial: p.writeIndustrial(&r)
-        case .dreamy: p.writeDreamy(&r)
-        case .synth: p.writeSynth(&r)
+
+        func written(_ style: Style?, stream: UInt64) -> Pattern {
+            var scratch = p
+            var rr = RNG(seed: seed ^ (stream &* 0x9E37_79B9_7F4A_7C15))
+            switch style {
+            case .tripHop: scratch.writeTripHop(&rr)
+            case .industrial: scratch.writeIndustrial(&rr)
+            case .dreamy: scratch.writeDreamy(&rr)
+            case .synth: scratch.writeSynth(&rr)
+            case nil: scratch.writeBreakbeat(&rr)
+            }
+            return scratch
+        }
+
+        if let groove = recipe.drums {
+            let d = written(groove.writer, stream: 1)
+            (p.kick, p.snare, p.hat, p.open, p.perc) = (d.kick, d.snare, d.hat, d.open, d.perc)
+        }
+        let b = written(recipe.bassPattern, stream: 2)
+        if recipe.sub { p.bass = b.bass }
+        if recipe.bassSound != nil { p.line = b.line }
+        if let keys = recipe.keys {
+            let k = written(keys, stream: 3)
+            (p.comp, p.melody) = (k.comp, k.melody)
         }
         return p
     }
@@ -302,5 +343,24 @@ struct Pattern {
                 melody[bar][s] = Hit(len: 6, vel: 0.65, midi: notes[melodyPick[i] % notes.count] + 12)
             }
         }
+    }
+
+    /// A classic breakbeat (Prodigy / Chemical Brothers): syncopated kicks, a snare with
+    /// ghost notes and a late hit, busy hats. Drums only; other lanes are left alone.
+    private mutating func writeBreakbeat(_ r: inout RNG) {
+        let kicks = r.pick([[0, 2, 10], [0, 10, 11], [0, 3, 8, 10], [0, 2, 7, 10]])
+        let late = r.chance(0.5)
+        for bar in 0..<4 {
+            for s in kicks { kick[bar][s] = s == 0 ? 1 : 0.85 }
+            snare[bar][4] = 1
+            snare[bar][12] = 1
+            for s in [7, 9] { if r.chance(0.6) { snare[bar][s] = 0.3 } }
+            if late { snare[bar][15] = 0.55 }
+            for s in 0..<16 { hat[bar][s] = s % 2 == 0 ? 0.5 : (r.chance(0.6) ? 0.25 : 0) }
+            if r.chance(0.5) { hat[bar][6] = 0; open[bar][6] = 0.4 }
+            if r.chance(0.4) { perc[bar][r.pick([3, 11, 14])] = 0.45 }
+        }
+        snare[3][13] = 0.6
+        snare[3][14] = 0.8
     }
 }

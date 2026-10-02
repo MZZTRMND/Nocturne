@@ -51,6 +51,7 @@ struct PianoPanel: View {
     }
 
     private func press(_ midi: Int) {
+        focused = true      // clicking a key takes typing focus back from the prompt field
         guard !pressed.contains(midi) else { return }
         pressed.insert(midi)
         groove.noteOn(midi)
