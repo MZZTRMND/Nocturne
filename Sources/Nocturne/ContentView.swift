@@ -58,7 +58,7 @@ struct ContentView: View {
             .sharedBackgroundVisibility(.hidden)
             // Without the system title nothing pushes the buttons right; this does.
             ToolbarSpacer(.flexible)
-            // Manual sits on its own, apart from the Mute All · Presets · Shortcuts group.
+            // Manual sits on its own, apart from the Presets · Mute All · Shortcuts group.
             ToolbarItem(placement: .primaryAction) {
                 Toggle(isOn: $groove.manual) {
                     Label("Manual", systemImage: "dial.medium")
@@ -69,15 +69,6 @@ struct ContentView: View {
             }
             ToolbarSpacer(.fixed)
             ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    groove.muteAll.toggle()
-                } label: {
-                    Image(systemName: groove.muteAll ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
-                .help(groove.muteAll ? "Unmute all (⇧⌘M)" : "Mute all (⇧⌘M)")
-                .accessibilityLabel(groove.muteAll ? "Unmute all" : "Mute all")
                 Menu {
                     Picker("Style", selection: $groove.style) {
                         ForEach(Style.allCases) { Text($0.title).tag($0) }
@@ -92,6 +83,15 @@ struct ContentView: View {
                 .menuIndicator(.hidden)
                 .help("Style preset: \(groove.style.title)")
                 .accessibilityLabel("Style preset, \(groove.style.title)")
+                Button {
+                    groove.muteAll.toggle()
+                } label: {
+                    Image(systemName: groove.muteAll ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .help(groove.muteAll ? "Unmute all (⇧⌘M)" : "Mute all (⇧⌘M)")
+                .accessibilityLabel(groove.muteAll ? "Unmute all" : "Mute all")
                 Button {
                     showShortcuts.toggle()
                 } label: {
