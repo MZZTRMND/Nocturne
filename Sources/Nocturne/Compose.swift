@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Prompt field ("describe what you want") plus the Manual switch.
+/// Prompt field: describe the music and the on-device model sets up manual mode.
 struct ComposeBar: View {
     @Bindable var groove: Groove
     @State private var prompt = ""
@@ -16,10 +16,15 @@ struct ComposeBar: View {
                     .foregroundStyle(.tint)
                     .symbolEffect(.pulse, isActive: groove.isComposing)
 
-                TextField("Describe a sound — “first 10 sec like Prodigy’s Narayan, darker and slower”",
-                          text: $prompt, axis: .vertical)
+                // Fixed colours: the glass adapts "secondary" text to the animated backdrop
+                // behind it, which made the placeholder flicker with the beat.
+                TextField("Prompt", text: $prompt,
+                          prompt: Text("Describe the music — mood, tempo, artists, how it should start…")
+                              .foregroundStyle(Color.white.opacity(0.42)),
+                          axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.body)
+                    .foregroundStyle(Color.white.opacity(0.95))
                     .lineLimit(1...3)
                     .focused($focused)
                     .onSubmit { groove.compose(prompt) }
@@ -33,19 +38,13 @@ struct ComposeBar: View {
                     .buttonStyle(.glassProminent)
                     .disabled(prompt.trimmingCharacters(in: .whitespaces).isEmpty || groove.isComposing || unavailable != nil)
                     .help(unavailable ?? "Turn the description into a groove (Return)")
-
-                Divider().frame(height: 22)
-
-                Toggle("Manual", isOn: $groove.manual)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .help("Set every part by hand instead of by the style")
             }
 
             if let note = groove.composeNote ?? unavailable {
                 Text(note)
                     .font(.caption)
-                    .foregroundStyle(groove.composeFailed || groove.composeNote == nil ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(groove.composeFailed || groove.composeNote == nil
+                                     ? Color.orange : Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 30)
             }

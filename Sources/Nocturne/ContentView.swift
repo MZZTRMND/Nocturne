@@ -29,11 +29,14 @@ struct ContentView: View {
                 .frame(maxHeight: .infinity)
 
                 VStack(spacing: 14) {
-                    ComposeBar(groove: groove)
                     ProgressionPanel(groove: groove)
                     PianoPanel(groove: groove)
                     FaderPanel(groove: groove)
                         .frame(height: groove.manual ? 268 : 170)
+                    if groove.manual {
+                        ComposeBar(groove: groove)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
                 }
                 .frame(maxHeight: .infinity)
             }
@@ -55,6 +58,11 @@ struct ContentView: View {
             // Without the system title nothing pushes the buttons right; this does.
             ToolbarSpacer(.flexible)
             ToolbarItemGroup(placement: .primaryAction) {
+                Toggle(isOn: $groove.manual) {
+                    Label("Manual", systemImage: "dial.medium")
+                }
+                .labelStyle(.titleAndIcon)
+                .help(groove.manual ? "Back to the style preset" : "Manual mode: set every part by hand or with a prompt")
                 Button {
                     groove.muteAll.toggle()
                 } label: {

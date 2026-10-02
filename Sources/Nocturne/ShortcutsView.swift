@@ -56,7 +56,7 @@ struct ShortcutsView: View {
             }
 
             section("Prompt & manual mode") {
-                Text("Describe a sound in the prompt bar and press Return — the on-device model sets up every part and plays it from the top. Switch on Manual to change each part's sound, pattern and the bar it comes in on.")
+                Text("Switch on Manual (top right) to change each part's sound, pattern and the bar it comes in on. Manual also shows the prompt bar under the mixer: describe the music and press Return, and the on-device model sets up every part and plays it from the top.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
