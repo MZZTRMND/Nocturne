@@ -40,12 +40,18 @@ struct PianoPanel: View {
         .onChange(of: focused) { _, isFocused in
             if !isFocused { pressed.forEach(release) }      // never leave a note hanging
         }
-        .onKeyPress(phases: [.down, .up]) { key in
+        // Auto-repeat events from a held key are swallowed too: left unhandled they fall
+        // through to AppKit, which plays the "invalid key" alert sound for each one.
+        .onKeyPress(phases: [.down, .repeat, .up]) { key in
             guard key.modifiers.subtracting(.shift).isEmpty,
                   let c = key.characters.lowercased().first,
                   let offset = Self.keymap[c] else { return .ignored }
             let midi = 60 + offset
-            if key.phase == .down { press(midi) } else { release(midi) }
+            switch key.phase {
+            case .down: press(midi)
+            case .up: release(midi)
+            default: break      // .repeat: the note is already sounding
+            }
             return .handled
         }
     }
