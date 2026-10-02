@@ -70,8 +70,6 @@ final class Groove {
     private(set) var recordingStarted: Date?
     /// True from stopping a take until it has been saved or discarded.
     private(set) var isSavingTake = false
-    /// The current (or last) take's mix level, sampled 10× a second, for the timeline.
-    private(set) var takeLevels: [Double] = []
     private(set) var lastTakeDuration: TimeInterval = 0
 
     var currentChord: String { pattern.chordNames[isPlaying ? bar : 0] }
@@ -89,7 +87,6 @@ final class Groove {
         componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0))
     @ObservationIgnored private var poll: Timer?
     @ObservationIgnored private let recorder = Recorder()
-    @ObservationIgnored private var tickCount = 0
 
     init() {
         var sr = engine.outputNode.outputFormat(forBus: 0).sampleRate
@@ -154,7 +151,6 @@ final class Groove {
         }
         isRecording = true
         recordingStarted = .now
-        takeLevels = []
         if !isPlaying { isPlaying = true }
     }
 
@@ -299,10 +295,5 @@ final class Groove {
         if synth.uiBar != bar { bar = synth.uiBar }
         let new = (0..<Synth.trackCount).map { Double(min(1, synth.meters[$0] * 2.5)) }
         if zip(new, levels).contains(where: { abs($0 - $1) > 0.02 }) { levels = new }
-        tickCount += 1
-        if isRecording && tickCount % 3 == 0 {
-            takeLevels.append(new.max() ?? 0)
-            if takeLevels.count > 600 { takeLevels.removeFirst(takeLevels.count - 600) }
-        }
     }
 }

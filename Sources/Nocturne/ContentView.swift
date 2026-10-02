@@ -150,7 +150,7 @@ private struct TransportCard: View {
     }
 }
 
-/// Big record button, elapsed time and a live timeline of the take's levels.
+/// Big record button, status and elapsed time.
 private struct RecordCard: View {
     let groove: Groove
 
@@ -184,21 +184,15 @@ private struct RecordCard: View {
                 Spacer(minLength: 0)
                 elapsed
             }
-            if groove.isRecording {
-                TakeTimeline(levels: groove.takeLevels, recording: true)
-                    .frame(height: 30)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
-        .animation(.smooth(duration: 0.3), value: groove.isRecording)
     }
 
     private var status: String {
         if groove.isRecording { return "Recording…" }
         if groove.isSavingTake { return "Saving…" }
-        return groove.takeLevels.isEmpty ? "Ready" : "Last take"
+        return groove.lastTakeDuration > 0 ? "Last take" : "Ready"
     }
 
     @ViewBuilder private var elapsed: some View {
@@ -215,35 +209,6 @@ private struct RecordCard: View {
         let secs = max(0, Int(t))
         return Text("\(secs / 60):\(String(format: "%02d", secs % 60))")
             .font(.title3.weight(.semibold).monospacedDigit())
-    }
-}
-
-/// A row of dots: idle ones are small and grey; recorded ones grow with the take's level,
-/// red while recording and dimmed afterwards. Scrolls once the row is full.
-private struct TakeTimeline: View {
-    let levels: [Double]
-    let recording: Bool
-    private let count = 36
-
-    var body: some View {
-        let recent = Array(levels.suffix(count))
-        HStack(spacing: 0) {
-            ForEach(0..<count, id: \.self) { i in
-                Group {
-                    if i < recent.count {
-                        Capsule()
-                            .fill(recording ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-                            .frame(width: 3.5, height: 4 + 24 * recent[i])
-                    } else {
-                        Circle().fill(.white.opacity(0.16)).frame(width: 4, height: 4)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .frame(maxHeight: .infinity)
-        .animation(.linear(duration: 0.1), value: levels.count)
-        .accessibilityHidden(true)
     }
 }
 
