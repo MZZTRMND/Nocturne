@@ -76,6 +76,8 @@ final class Groove {
 
     @ObservationIgnored let synth: Synth
     @ObservationIgnored private var seed: UInt64 = .random(in: 0...UInt64.max)
+    /// The seed the current preset was loaded with, so Reset can bring back that exact pattern.
+    @ObservationIgnored private var presetSeed: UInt64 = 0
     @ObservationIgnored private var hasManualRecipe = false
     /// Set while a saved project is applied, so property observers don't regenerate.
     @ObservationIgnored private var restoring = false
@@ -266,6 +268,7 @@ final class Groove {
         var manualRecipe: Recipe
         var pattern: Pattern
         var seed: UInt64
+        var presetSeed: UInt64?
         var bpm, swing, tone, grit, space, volume: Double
         var tracks: [Track]
     }
@@ -274,6 +277,7 @@ final class Groove {
 
     var project: Project {
         Project(style: style, manual: manual, manualRecipe: manualRecipe, pattern: pattern, seed: seed,
+                presetSeed: presetSeed,
                 bpm: bpm, swing: swing, tone: tone, grit: grit, space: space, volume: volume, tracks: tracks)
     }
 
@@ -285,6 +289,7 @@ final class Groove {
         hasManualRecipe = true
         manual = p.manual
         seed = p.seed
+        presetSeed = p.presetSeed ?? p.seed
         bpm = p.bpm; swing = p.swing; tone = p.tone; grit = p.grit; space = p.space; volume = p.volume
         if p.tracks.count == tracks.count { tracks = p.tracks }
         pattern = p.pattern
@@ -407,13 +412,32 @@ final class Groove {
     func noteOff(_ midi: Int) { synth.noteOff(midi) }
 
     private func loadStyle() {
+        applyDefaultKnobs()
+        seed = .random(in: 0...UInt64.max)
+        presetSeed = seed
+        rebuild()
+    }
+
+    private func applyDefaultKnobs() {
         let d = style.defaults
         bpm = d.bpm
         swing = d.swing
         tone = d.tone
         grit = d.grit
         space = d.space
-        seed = .random(in: 0...UInt64.max)
+    }
+
+    /// Puts the current preset back exactly as it started: the same pattern (not a new
+    /// variation), default knobs, faders at 80% and nothing muted. Manual mode turns off;
+    /// its setup is kept for when it's switched back on. Mute All is left alone.
+    func resetPreset() {
+        restoring = true            // one rebuild below instead of one per change
+        manual = false
+        restoring = false
+        applyDefaultKnobs()
+        volume = 0.8
+        tracks = tracks.map { Track(id: $0.id) }
+        seed = presetSeed
         rebuild()
     }
 

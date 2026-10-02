@@ -176,6 +176,21 @@ enum EditTest {
         check("project round-trips the pattern", g2.pattern == g.pattern)
         check("project round-trips settings", g2.manual && g2.manualRecipe == g.manualRecipe && g2.bpm == g.bpm)
         print("project file: \(data.count / 1024) KB")
+
+        // Reset brings the preset back exactly as it was first loaded.
+        let r = Groove()
+        r.style = r.style == .industrial ? .dreamy : .industrial
+        let fresh = r.pattern, d = r.style.defaults
+        r.bpm = 150; r.tone = 0.1; r.volume = 0.3
+        r.tracks[0].muted = true; r.tracks[2].volume = 0.2
+        r.manual = true
+        r.edit { $0.toggle(.snare, bar: 0, step: 3) }
+        r.manualRecipe.keys = .synth
+        r.resetPreset()
+        check("reset restores the original pattern", r.pattern == fresh)
+        check("reset restores default knobs", r.bpm == d.bpm && r.tone == d.tone && r.volume == 0.8)
+        check("reset restores faders and mutes", r.tracks.allSatisfy { $0.volume == 0.8 && !$0.muted })
+        check("reset leaves manual mode, keeping its setup", !r.manual && r.manualRecipe.keys == .synth)
     }
 }
 

@@ -74,6 +74,10 @@ struct ContentView: View {
                         ForEach(Style.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.inline)
+                    Divider()
+                    Button("Reset \(groove.style.title)", systemImage: "arrow.counterclockwise") {
+                        groove.resetPreset()
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "music.note.list")
