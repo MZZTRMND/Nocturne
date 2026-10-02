@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Style
 
 enum Style: Int, CaseIterable, Identifiable, Codable {
-    case tripHop, industrial, dreamy, synth
+    case tripHop, industrial, dreamy, synth, ambient
 
     var id: Int { rawValue }
 
@@ -13,12 +13,13 @@ enum Style: Int, CaseIterable, Identifiable, Codable {
         case .industrial: "Industrial"
         case .dreamy: "Dreamy"
         case .synth: "Synth"
+        case .ambient: "Ambient"
         }
     }
 
     /// MIDI note the progressions are built on.
-    var keyRoot: Int { [50, 52, 57, 48][rawValue] }      // D3, E3, A3, C3
-    var keyName: String { ["D minor", "E minor", "A minor", "C minor"][rawValue] }
+    var keyRoot: Int { [50, 52, 57, 48, 47][rawValue] }  // D3, E3, A3, C3, B2
+    var keyName: String { ["D minor", "E minor", "A minor", "C minor", "B minor"][rawValue] }
 
     struct Defaults { let bpm, swing, tone, grit, space: Double }
 
@@ -28,6 +29,7 @@ enum Style: Int, CaseIterable, Identifiable, Codable {
         case .industrial: Defaults(bpm: 116, swing: 0.0, tone: 0.7, grit: 0.55, space: 0.35)
         case .dreamy: Defaults(bpm: 104, swing: 0.12, tone: 0.55, grit: 0.12, space: 0.65)
         case .synth: Defaults(bpm: 96, swing: 0, tone: 0.5, grit: 0.35, space: 0.5)
+        case .ambient: Defaults(bpm: 64, swing: 0, tone: 0.45, grit: 0.15, space: 0.85)
         }
     }
 
@@ -37,6 +39,7 @@ enum Style: Int, CaseIterable, Identifiable, Codable {
         case .industrial: ["Machine", "Sub", "Grind", "Pad", "Drone"]
         case .dreamy: ["Drums", "Sub", "Arp", "Pad", "Tape"]
         case .synth: ["Drums", "Drone", "Pulse", "Piano", "Static"]
+        case .ambient: ["Metal", "Drone", "Low", "Pad", "Wind"]
         }
     }
 }
@@ -93,6 +96,12 @@ private func progressions(_ style: Style) -> [[(Int, Quality)]] {
         [(0, .five), (0, .five), (1, .flat2), (10, .tritone)],
         [(0, .five), (3, .five), (1, .flat2), (0, .tritone)],
         [(0, .flat2), (0, .five), (5, .tritone), (1, .five)],
+    ]
+    // Desolate: bare fifths and minor chords that drift a half-step and back.
+    case .ambient: [
+        [(0, .m7), (0, .m7), (1, .five), (0, .five)],
+        [(0, .five), (8, .five), (0, .five), (1, .five)],
+        [(0, .m9), (0, .m9), (10, .five), (1, .five)],
     ]
     // Minimal and bruised: C minor sitting on A♭ and E♭, open fifths on B♭.
     case .synth: [
@@ -198,6 +207,7 @@ struct Pattern {
             case .industrial: scratch.writeIndustrial(&rr)
             case .dreamy: scratch.writeDreamy(&rr)
             case .synth: scratch.writeSynth(&rr)
+            case .ambient: scratch.writeAmbient(&rr)
             case nil: scratch.writeBreakbeat(&rr)
             }
             return scratch
@@ -362,5 +372,27 @@ struct Pattern {
         }
         snare[3][13] = 0.6
         snare[3][14] = 0.8
+    }
+
+    /// Dark ambient in the S.T.A.L.K.E.R. / MoozE vein: no beat, just distant thuds,
+    /// creaks and metal clangs, a held drone and a wavering low line that slips down a
+    /// half-step, a slow eerie pad and the odd lonely note.
+    private mutating func writeAmbient(_ r: inout RNG) {
+        let clangs = (0..<4).map { _ in r.chance(0.6) ? r.pick([3, 6, 9, 13]) : -1 }
+        for bar in 0..<4 {
+            if bar % 2 == 0 || r.chance(0.3) { kick[bar][0] = 0.5 }                  // far-off thud
+            if clangs[bar] >= 0 { perc[bar][clangs[bar]] = 0.4 + 0.3 * r.float() }   // metal
+            if bar == 2 || r.chance(0.25) { snare[bar][r.pick([4, 8, 10])] = 0.5 }   // creak
+            for s in 0..<16 { if r.chance(0.08) { hat[bar][s] = 0.15 + 0.2 * r.float() } }
+
+            let root = bassRoots[bar]
+            bass[bar][0] = Hit(len: 16, vel: 0.75, midi: root)
+            line[bar][0] = Hit(len: 16, vel: 0.6, midi: root + 12 + (bar == 3 ? 1 : 0))
+            comp[bar][0] = Hit(len: 16, vel: 0.3)
+            if r.chance(0.6) {
+                let notes = chords[bar].sorted()
+                melody[bar][r.pick([2, 6, 9, 12])] = Hit(len: 8, vel: 0.4, midi: notes[Int(r.next() % UInt64(notes.count))] + 12)
+            }
+        }
     }
 }

@@ -217,7 +217,7 @@ final class Groove {
     private func rebuild() {
         pattern = Pattern.make(recipe, seed: seed)
         synth.setPattern(pattern)
-        reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral, .mediumHall][recipe.main.rawValue])
+        reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral, .mediumHall, .cathedral][recipe.main.rawValue])
         updateFX()
     }
 
@@ -280,7 +280,7 @@ final class Groove {
 
     private func updateFX() {
         reverb.wetDryMix = Float(space * 55)
-        delay.wetDryMix = Float(space * [30, 12, 35, 15][recipe.main.rawValue])     // dub delay for trip-hop and dreamy
+        delay.wetDryMix = Float(space * [30, 12, 35, 15, 25][recipe.main.rawValue])     // dub delay for trip-hop and dreamy
         delay.delayTime = 0.75 * 60 / bpm      // dotted eighth
     }
 

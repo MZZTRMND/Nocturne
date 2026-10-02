@@ -7,6 +7,7 @@ extension Style {
         case .industrial: Color(red: 0.96, green: 0.34, blue: 0.34)
         case .dreamy: Color(red: 0.25, green: 0.6, blue: 1.0)
         case .synth: Color(red: 0.35, green: 0.85, blue: 0.72)
+        case .ambient: Color(red: 0.78, green: 0.86, blue: 0.3)     // radioactive yellow-green
         }
     }
 }

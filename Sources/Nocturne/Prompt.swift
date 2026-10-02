@@ -11,21 +11,21 @@ struct GrooveSpec {
     var bpm: Int
     @Guide(description: "Key root note; the music is always minor", .anyOf(["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]))
     var key: String
-    @Guide(description: "Chord flavour", .anyOf(["dark minor", "menace", "dreamy", "cold"]))
+    @Guide(description: "Chord flavour", .anyOf(["dark minor", "menace", "dreamy", "cold", "desolate"]))
     var harmony: String
-    @Guide(description: "Drum pattern", .anyOf(["boom-bap", "hard four-on-the-floor", "soft four-on-the-floor", "half-time", "breakbeat", "none"]))
+    @Guide(description: "Drum pattern", .anyOf(["boom-bap", "hard four-on-the-floor", "soft four-on-the-floor", "half-time", "breakbeat", "drift", "none"]))
     var drums: String
-    @Guide(description: "Drum kit sound", .anyOf(["dusty", "industrial", "soft", "glitch"]))
+    @Guide(description: "Drum kit sound", .anyOf(["dusty", "industrial", "soft", "glitch", "metal"]))
     var drumKit: String
     @Guide(description: "Whether a deep sub bass plays under everything")
     var sub: Bool
-    @Guide(description: "Bass line sound", .anyOf(["driven", "grind", "pluck", "pulse", "none"]))
+    @Guide(description: "Bass line sound", .anyOf(["driven", "grind", "pluck", "pulse", "drone", "none"]))
     var bassSound: String
-    @Guide(description: "Bass line pattern", .anyOf(["riff", "rolling", "arpeggio", "sixteenths"]))
+    @Guide(description: "Bass line pattern", .anyOf(["riff", "rolling", "arpeggio", "sixteenths", "held"]))
     var bassPattern: String
-    @Guide(description: "Keys sound", .anyOf(["rhodes", "dark pad", "warm pad", "felt piano", "none"]))
+    @Guide(description: "Keys sound", .anyOf(["rhodes", "dark pad", "warm pad", "felt piano", "eerie pad", "none"]))
     var keys: String
-    @Guide(description: "Background texture", .anyOf(["vinyl haze", "drone", "tape", "static", "none"]))
+    @Guide(description: "Background texture", .anyOf(["vinyl haze", "drone", "tape", "static", "wind", "none"]))
     var texture: String
     @Guide(description: "0 is bright and open, 10 is pitch dark", .range(0...10))
     var darkness: Int
@@ -72,6 +72,8 @@ struct AppleInterpreter: PromptInterpreter {
     - Nine Inch Nails, industrial: hard four-on-the-floor, industrial kit, grind bass, dark pad, drone, high distortion.
     - Board of Canada, Moby, ambient: soft four-on-the-floor, soft kit, pluck arpeggio, warm pad, tape, lots of space.
     - Trent Reznor and Atticus Ross scores, cinematic: half-time, glitch kit, pulse sixteenths, felt piano, static, harmony cold.
+    - S.T.A.L.K.E.R., MoozE, dark ambient, post-apocalyptic, Chernobyl: drift drums, metal kit, drone bass held, \
+    eerie pad, wind texture, harmony desolate, about 60 to 70 BPM, lots of space, little distortion.
     - "Darker" means higher darkness and the dark minor or menace harmony; "slower" or "low tempo" means a lower BPM.
 
     Intros: each bar lasts 240 / BPM seconds. When asked for the start or first seconds of a track, \
@@ -132,6 +134,8 @@ struct ArtistReference {
                         bassSound: "grind", bassPattern: "rolling", keys: "dark pad", texture: "drone"),
         ArtistReference(names: ["board of canada", "boards of canada", "moby"], drums: "soft four-on-the-floor", drumKit: "soft",
                         bassSound: "pluck", bassPattern: "arpeggio", keys: "warm pad", texture: "tape"),
+        ArtistReference(names: ["stalker", "s.t.a.l.k.e.r", "mooze", "radwind", "chernobyl", "dark ambient"], drums: "drift", drumKit: "metal",
+                        bassSound: "drone", bassPattern: "held", keys: "eerie pad", texture: "wind"),
         ArtistReference(names: ["reznor", "atticus", "social network"], drums: "half-time", drumKit: "glitch",
                         bassSound: "pulse", bassPattern: "sixteenths", keys: "felt piano", texture: "static"),
     ]
@@ -158,18 +162,18 @@ extension GrooveSpec {
         func style(_ value: String, _ names: [String]) -> Style? {
             names.firstIndex(of: value).flatMap { Style(rawValue: $0) }
         }
-        let harmonyStyle = style(harmony, ["dark minor", "menace", "dreamy", "cold"]) ?? .tripHop
+        let harmonyStyle = style(harmony, ["dark minor", "menace", "dreamy", "cold", "desolate"]) ?? .tripHop
         var r = Recipe.preset(harmonyStyle)
         let keys = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
         r.key = keys.firstIndex(of: key) ?? r.key
-        r.drums = ["boom-bap", "hard four-on-the-floor", "soft four-on-the-floor", "half-time", "breakbeat"]
+        r.drums = ["boom-bap", "hard four-on-the-floor", "soft four-on-the-floor", "half-time", "breakbeat", "drift"]
             .firstIndex(of: drums).flatMap { DrumGroove(rawValue: $0) }
-        r.kit = style(drumKit, ["dusty", "industrial", "soft", "glitch"]) ?? harmonyStyle
+        r.kit = style(drumKit, ["dusty", "industrial", "soft", "glitch", "metal"]) ?? harmonyStyle
         r.sub = sub
-        r.bassSound = style(bassSound, ["driven", "grind", "pluck", "pulse"])
-        r.bassPattern = style(bassPattern, ["riff", "rolling", "arpeggio", "sixteenths"]) ?? harmonyStyle
-        r.keys = style(self.keys, ["rhodes", "dark pad", "warm pad", "felt piano"])
-        r.texture = style(texture, ["vinyl haze", "drone", "tape", "static"])
+        r.bassSound = style(bassSound, ["driven", "grind", "pluck", "pulse", "drone"])
+        r.bassPattern = style(bassPattern, ["riff", "rolling", "arpeggio", "sixteenths", "held"]) ?? harmonyStyle
+        r.keys = style(self.keys, ["rhodes", "dark pad", "warm pad", "felt piano", "eerie pad"])
+        r.texture = style(texture, ["vinyl haze", "drone", "tape", "static", "wind"])
         let bar = { (b: Int) in min(max(b - 1, 0), 7) }
         var enter = [bar(drumsEnter), bar(bassEnter), bar(bassEnter), bar(keysEnter), bar(textureEnter)]
         // Something always plays from bar 1: shift the whole build so the first part starts there.
