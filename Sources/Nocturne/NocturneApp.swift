@@ -8,6 +8,10 @@ struct NocturneApp: App {
 
     init() {
         let args = CommandLine.arguments
+        if args.contains("--edit-test") {
+            EditTest.run()
+            exit(0)
+        }
         if let i = args.firstIndex(of: "--prompt-test"), i + 1 < args.count {
             PromptTest.run(args[i + 1])
             exit(0)
@@ -25,6 +29,16 @@ struct NocturneApp: App {
         }
         .windowResizability(.contentSize)
         .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Open…") { groove.open() }
+                    .keyboardShortcut("o")
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") { groove.save() }
+                    .keyboardShortcut("s")
+                Button("Save As…") { groove.save(as: true) }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
             CommandMenu("Playback") {
                 Button(groove.isPlaying ? "Stop" : "Play") { groove.isPlaying.toggle() }
                     // Off while typing a prompt, or Space couldn't be typed.
@@ -54,7 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             // `--snapshot-shortcuts` renders the help popover's content on its own.
-            let content = args.contains("--snapshot-shortcuts")
+            let content = args.contains("--snapshot-editor")
+                ? AnyView(EditorPreview().padding(20).frame(width: 760).background(Color(white: 0.14)))
+                : args.contains("--snapshot-shortcuts")
                 ? AnyView(ShortcutsView().background(Color(white: 0.16)))
                 : AnyView(ContentView(groove: {
                     let g = Groove()
@@ -101,6 +117,65 @@ enum RecordTest {
         groove.stopRecording(tail: 1, save: dest)
         try? await Task.sleep(for: .seconds(2))
         NSApp.terminate(nil)
+    }
+}
+
+/// Both step-editor grids, for `--snapshot-editor`.
+private struct EditorPreview: View {
+    @State private var groove: Groove = {
+        let g = Groove()
+        g.manual = true
+        return g
+    }()
+    @State private var octave = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            DrumGrid(groove: groove, bar: 0).frame(height: 150)
+            BassRoll(groove: groove, bar: 0, octave: $octave).frame(height: 280)
+        }
+        .tint(groove.style.accent)
+    }
+}
+
+/// `--edit-test`: exercises hand edits, edit-preserving regeneration and project files.
+@MainActor
+enum EditTest {
+    static func run() {
+        func check(_ name: String, _ ok: Bool) { print(ok ? "PASS" : "FAIL", name) }
+        let g = Groove()
+        g.manual = true
+        let base = g.pattern.bassEditorBase
+        let kickBefore = g.pattern.kick[1][5]
+        g.edit { $0.toggle(.kick, bar: 1, step: 5) }
+        check("kick toggles", g.pattern.kick[1][5] != kickBefore)
+        g.edit { $0.line[0] = Array(repeating: nil, count: 16); $0.toggleBass(bar: 0, step: 3, midi: base + 3) }
+        g.edit { $0.toggleBass(bar: 0, step: 7, midi: base + 7) }
+        check("bass notes placed", g.pattern.line[0][3]?.midi == base + 3 && g.pattern.line[0][7]?.midi == base + 7)
+        check("bass note rings until the next (max a beat)", g.pattern.line[0][3]?.len == 4 && g.pattern.line[0][7]?.len == 4)
+        let rootBefore = g.pattern.bassRoots[2]
+        g.edit { $0.setChord(bar: 2, root: 1, .maj7) }
+        check("chord swapped", g.pattern.chordNames[2].hasSuffix("maj7") && g.pattern.bassRoots[2] != rootBefore)
+
+        let edited = g.pattern
+        g.manualRecipe.keys = .ambient
+        check("changing keys keeps drum edit", g.pattern.kick == edited.kick)
+        check("changing keys keeps bass edit", g.pattern.line == edited.line)
+        check("changing keys keeps chord edit", g.pattern.chordNames == edited.chordNames)
+        check("changing keys regenerates keys", g.pattern.keysSound == .ambient)
+
+        g.manualRecipe.drums = .breakbeat
+        check("new drum pattern replaces drums", g.pattern.kick != edited.kick)
+        check("new drum pattern keeps bass edit", g.pattern.line == edited.line)
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("edit-test.nocturne")
+        let data = try! JSONEncoder().encode(g.project)
+        try! data.write(to: url)
+        let g2 = Groove()
+        g2.restore(try! JSONDecoder().decode(Groove.Project.self, from: Data(contentsOf: url)))
+        check("project round-trips the pattern", g2.pattern == g.pattern)
+        check("project round-trips settings", g2.manual && g2.manualRecipe == g.manualRecipe && g2.bpm == g.bpm)
+        print("project file: \(data.count / 1024) KB")
     }
 }
 

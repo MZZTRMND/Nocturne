@@ -46,7 +46,7 @@ enum Style: Int, CaseIterable, Identifiable, Codable {
 
 // MARK: - Chords
 
-enum Quality {
+enum Quality: Codable {
     case m7, m9, m11, maj7, maj9, dom9, dom13, dom7b9, five, flat2, tritone
 
     var intervals: [Int] {
@@ -138,7 +138,7 @@ struct RNG {
 
 // MARK: - Pattern
 
-struct Hit {
+struct Hit: Codable, Equatable {
     var len: Int        // in 16th steps
     var vel: Float
     var midi = 0
@@ -147,7 +147,7 @@ struct Hit {
 /// Four bars of 16 steps. Drum lanes hold velocities (0 = silent). `bass` is the sub,
 /// `line` the audible bass part, `comp` the rhythm of the keys' chords, `melody` single
 /// notes on the keys sound.
-struct Pattern {
+struct Pattern: Codable, Equatable {
     /// The main style: harmony, reverb and overall balance.
     let style: Style
     /// Which style's sound each part uses (they can differ in manual mode).
@@ -156,6 +156,8 @@ struct Pattern {
     /// Bar each track enters on (drums, sub, bass, keys, texture); later bars loop all in.
     var enter = [0, 0, 0, 0, 0]
     var keyName = ""
+    /// MIDI note of the key's root, for re-voicing chords edited by hand.
+    var keyRoot = 48
     var kick = Pattern.lane(), snare = Pattern.lane(), hat = Pattern.lane()
     var open = Pattern.lane(), perc = Pattern.lane()
     var bass = Pattern.notes(), line = Pattern.notes(), comp = Pattern.notes(), melody = Pattern.notes()
@@ -165,6 +167,40 @@ struct Pattern {
 
     static func lane() -> [[Float]] { Array(repeating: Array(repeating: 0, count: 16), count: 4) }
     static func notes() -> [[Hit?]] { Array(repeating: Array(repeating: nil, count: 16), count: 4) }
+
+    /// A chord `root` semitones above the key, voiced inside the on-screen keyboard
+    /// (C3–E5), with its bass root and name.
+    static func voice(keyRoot: Int, root: Int, _ q: Quality) -> (chord: [Int], bassRoot: Int, name: String) {
+        var base = keyRoot + root
+        while base > 59 { base -= 12 }
+        while base < 48 { base += 12 }
+        var b = keyRoot + root - 24
+        while b < 31 { b += 12 }
+        while b > 42 { b -= 12 }
+        return (q.intervals.map { base + $0 }, b, noteNames[((keyRoot + root) % 12 + 12) % 12] + q.suffix)
+    }
+
+    /// Chords offered when swapping one by hand: the key's own, plus the dark ♭II.
+    static let chordChoices: [(root: Int, quality: Quality)] = [
+        (0, .m7), (0, .m9), (0, .m11), (0, .five), (1, .maj7), (3, .maj7), (5, .m7), (5, .m9),
+        (7, .m7), (7, .dom7b9), (7, .five), (8, .maj7), (8, .maj9), (10, .dom9), (10, .five),
+    ]
+
+    /// Replaces bar `bar`'s chord, moving that bar's bass, sub and melody notes by the
+    /// same amount so they follow the new root.
+    mutating func setChord(bar: Int, root: Int, _ q: Quality) {
+        let v = Pattern.voice(keyRoot: keyRoot, root: root, q)
+        var shift = (v.bassRoot - bassRoots[bar]) % 12
+        if shift > 6 { shift -= 12 } else if shift < -6 { shift += 12 }
+        chords[bar] = v.chord
+        chordNames[bar] = v.name
+        bassRoots[bar] = v.bassRoot
+        for s in 0..<16 {
+            bass[bar][s]?.midi += shift
+            line[bar][s]?.midi += shift
+            melody[bar][s]?.midi += shift
+        }
+    }
 
     static func make(_ style: Style, seed: UInt64) -> Pattern {
         make(.preset(style), seed: seed)
@@ -185,18 +221,12 @@ struct Pattern {
         // Keep the key's root near the style's own register.
         var keyRoot = recipe.harmony.keyRoot - recipe.harmony.keyRoot % 12 + recipe.key
         if keyRoot - recipe.harmony.keyRoot > 6 { keyRoot -= 12 }
+        p.keyRoot = keyRoot
         for (root, q) in r.pick(progressions(recipe.harmony)) {
-            var base = keyRoot + root
-            // Keeps every voicing inside the on-screen keyboard (C3–E5).
-            while base > 59 { base -= 12 }
-            while base < 48 { base += 12 }
-            p.chords.append(q.intervals.map { base + $0 })
-
-            var b = keyRoot + root - 24
-            while b < 31 { b += 12 }
-            while b > 42 { b -= 12 }
-            p.bassRoots.append(b)
-            p.chordNames.append(noteNames[((keyRoot + root) % 12 + 12) % 12] + q.suffix)
+            let v = voice(keyRoot: keyRoot, root: root, q)
+            p.chords.append(v.chord)
+            p.bassRoots.append(v.bassRoot)
+            p.chordNames.append(v.name)
         }
 
         func written(_ style: Style?, stream: UInt64) -> Pattern {

@@ -8,6 +8,12 @@ struct PianoPanel: View {
 
     @State private var pressed: Set<Int> = []
     @FocusState private var focused: Bool
+    @State private var selectedTab: EditorTab = .keys
+    @State private var editBar = 0
+    @State private var bassOctave = 0
+
+    /// Steps tabs only exist in manual mode.
+    private var tab: EditorTab { groove.manual ? selectedTab : .keys }
 
     private static let keymap: [Character: Int] = [
         "a": 0, "w": 1, "s": 2, "e": 3, "d": 4, "f": 5, "t": 6, "g": 7, "y": 8,
@@ -16,19 +22,46 @@ struct PianoPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(groove.trackName(3)).font(.headline)
-                Text("Click or play A – ; on your keyboard")
+            HStack(alignment: .center, spacing: 14) {
+                if groove.manual {
+                    Picker("Editor", selection: $selectedTab) {
+                        ForEach(EditorTab.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 210)
+                    if tab != .keys {
+                        Picker("Bar", selection: $editBar) {
+                            ForEach(0..<4, id: \.self) { Text("Bar \($0 + 1)").tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .frame(width: 250)
+                    }
+                } else {
+                    Text(groove.trackName(3)).font(.headline)
+                }
+                Text(hint)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Spacer()
+                    .lineLimit(1)
+                Spacer(minLength: 0)
             }
-            PianoKeyboard(chordNotes: groove.chordNotes,
-                          pressed: pressed,
-                          accent: groove.style.accent,
-                          down: press,
-                          up: release)
-                .frame(minHeight: 300, maxHeight: .infinity)
+            Group {
+                switch tab {
+                case .keys:
+                    PianoKeyboard(chordNotes: groove.chordNotes,
+                                  pressed: pressed,
+                                  accent: groove.style.accent,
+                                  down: press,
+                                  up: release)
+                case .drums:
+                    DrumGrid(groove: groove, bar: editBar)
+                case .bass:
+                    BassRoll(groove: groove, bar: editBar, octave: $bassOctave)
+                }
+            }
+            .frame(minHeight: 300, maxHeight: .infinity)
         }
         .padding(16)
         .frame(maxHeight: .infinity)
@@ -53,6 +86,14 @@ struct PianoPanel: View {
             default: break      // .repeat: the note is already sounding
             }
             return .handled
+        }
+    }
+
+    private var hint: String {
+        switch tab {
+        case .keys: "Click or play A – ; on your keyboard"
+        case .drums: "Click a step to add or remove a hit"
+        case .bass: "Click to place a note — it rings until the next one"
         }
     }
 

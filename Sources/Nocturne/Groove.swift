@@ -3,7 +3,7 @@ import AVFoundation
 import Observation
 import UniformTypeIdentifiers
 
-struct Track: Identifiable {
+struct Track: Identifiable, Codable {
     let id: Int
     var volume: Double = 0.8
     var muted = false
@@ -14,7 +14,7 @@ struct Track: Identifiable {
 final class Groove {
     var style: Style = .tripHop {
         didSet {
-            guard style != oldValue else { return }
+            guard style != oldValue, !restoring else { return }
             if manual { manualRecipe = .preset(style) }     // picking a style starts manual from it
             loadStyle()
         }
@@ -22,14 +22,14 @@ final class Groove {
     /// Manual mode: every part is set by hand (or by a prompt) instead of by the style.
     var manual = false {
         didSet {
-            guard manual != oldValue else { return }
+            guard manual != oldValue, !restoring else { return }
             if manual && !hasManualRecipe { manualRecipe = .preset(style); hasManualRecipe = true }
             rebuild()
         }
     }
     /// The hand-made setup; kept while manual mode is off so switching back restores it.
     var manualRecipe: Recipe = .preset(.tripHop) {
-        didSet { if manual && manualRecipe != oldValue { rebuild() } }
+        didSet { if manual && manualRecipe != oldValue && !restoring { rebuild(keepingEditsFrom: oldValue) } }
     }
     var recipe: Recipe { manual ? manualRecipe : .preset(style) }
 
@@ -77,6 +77,10 @@ final class Groove {
     @ObservationIgnored let synth: Synth
     @ObservationIgnored private var seed: UInt64 = .random(in: 0...UInt64.max)
     @ObservationIgnored private var hasManualRecipe = false
+    /// Set while a saved project is applied, so property observers don't regenerate.
+    @ObservationIgnored private var restoring = false
+    /// Where the current project was opened from or last saved to.
+    private(set) var fileURL: URL?
     @ObservationIgnored private let interpreter: PromptInterpreter = AppleInterpreter()
     @ObservationIgnored private let engine = AVAudioEngine()
     @ObservationIgnored private let delay = AVAudioUnitDelay()
@@ -116,6 +120,16 @@ final class Groove {
 
         poll = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
+        }
+
+        // Pick up where the last session left off, and save it again on quit.
+        if let data = try? Data(contentsOf: Groove.lastSessionURL),
+           let project = try? JSONDecoder().decode(Project.self, from: data) {
+            restore(project)
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.saveLastSession() }
         }
     }
 
@@ -213,12 +227,137 @@ final class Groove {
     // MARK: Pattern
 
     /// Regenerates the pattern from the current recipe, keeping the random seed so
-    /// changing one part doesn't reshuffle the others.
-    private func rebuild() {
-        pattern = Pattern.make(recipe, seed: seed)
+    /// changing one part doesn't reshuffle the others. Given the previous recipe, parts
+    /// whose settings didn't change keep their current notes, including hand edits.
+    private func rebuild(keepingEditsFrom old: Recipe? = nil) {
+        var p = Pattern.make(recipe, seed: seed)
+        if let old {
+            let cur = pattern, new = recipe
+            if old.drums == new.drums {
+                (p.kick, p.snare, p.hat, p.open, p.perc) = (cur.kick, cur.snare, cur.hat, cur.open, cur.perc)
+            }
+            if old.harmony == new.harmony && old.key == new.key {
+                (p.chords, p.chordNames, p.bassRoots) = (cur.chords, cur.chordNames, cur.bassRoots)
+                if old.bassPattern == new.bassPattern && old.sub == new.sub { p.bass = cur.bass }
+                if old.bassPattern == new.bassPattern && (old.bassSound == nil) == (new.bassSound == nil) { p.line = cur.line }
+                if old.keys == new.keys { (p.comp, p.melody) = (cur.comp, cur.melody) }
+            }
+        }
+        pattern = p
         synth.setPattern(pattern)
         reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral, .mediumHall, .cathedral][recipe.main.rawValue])
         updateFX()
+    }
+
+    /// Applies a hand edit (step editor, chord swap) to the playing pattern.
+    func edit(_ change: (inout Pattern) -> Void) {
+        var p = pattern
+        change(&p)
+        pattern = p
+        synth.setPattern(p)
+    }
+
+    // MARK: Projects
+
+    struct Project: Codable {
+        var version = 1
+        var style: Style
+        var manual: Bool
+        var manualRecipe: Recipe
+        var pattern: Pattern
+        var seed: UInt64
+        var bpm, swing, tone, grit, space, volume: Double
+        var tracks: [Track]
+    }
+
+    static let fileType = UTType(filenameExtension: "nocturne", conformingTo: .json) ?? .json
+
+    var project: Project {
+        Project(style: style, manual: manual, manualRecipe: manualRecipe, pattern: pattern, seed: seed,
+                bpm: bpm, swing: swing, tone: tone, grit: grit, space: space, volume: volume, tracks: tracks)
+    }
+
+    /// Puts everything back exactly as saved: the pattern as it was, not regenerated.
+    func restore(_ p: Project) {
+        restoring = true
+        style = p.style
+        manualRecipe = p.manualRecipe
+        hasManualRecipe = true
+        manual = p.manual
+        seed = p.seed
+        bpm = p.bpm; swing = p.swing; tone = p.tone; grit = p.grit; space = p.space; volume = p.volume
+        if p.tracks.count == tracks.count { tracks = p.tracks }
+        pattern = p.pattern
+        synth.setPattern(pattern)
+        reverb.loadFactoryPreset([.largeHall2, .largeChamber, .cathedral, .mediumHall, .cathedral][recipe.main.rawValue])
+        updateFX()
+        restoring = false
+    }
+
+    func save(as saveAs: Bool = false) {
+        if !saveAs, let fileURL {
+            write(to: fileURL)
+            return
+        }
+        let panel = NSSavePanel()
+        panel.title = "Save Project"
+        panel.allowedContentTypes = [Groove.fileType]
+        panel.nameFieldStringValue = fileURL?.lastPathComponent ?? "Nocturne \(style.title).nocturne"
+        panel.canCreateDirectories = true
+        sheet(panel) { [weak self] ok in
+            guard ok, let url = panel.url, let self else { return }
+            if self.write(to: url) { self.fileURL = url }
+        }
+    }
+
+    func open() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Project"
+        panel.allowedContentTypes = [Groove.fileType]
+        sheet(panel) { [weak self] ok in
+            guard ok, let url = panel.url, let self else { return }
+            do {
+                let project = try JSONDecoder().decode(Project.self, from: Data(contentsOf: url))
+                self.isPlaying = false
+                self.restore(project)
+                self.fileURL = url
+            } catch {
+                NSAlert(error: error).runModal()
+            }
+        }
+    }
+
+    @discardableResult
+    private func write(to url: URL) -> Bool {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(project).write(to: url, options: .atomic)
+            return true
+        } catch {
+            NSAlert(error: error).runModal()
+            return false
+        }
+    }
+
+    private func sheet(_ panel: NSSavePanel, _ done: @escaping (Bool) -> Void) {
+        if let window = NSApp.keyWindow ?? NSApp.windows.first {
+            panel.beginSheetModal(for: window) { done($0 == .OK) }
+        } else {
+            done(panel.runModal() == .OK)
+        }
+    }
+
+    /// Per app (bundle id), so the test build never touches the real app's session.
+    static var lastSessionURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Nocturne", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("Last Session.nocturne")
+    }
+
+    func saveLastSession() {
+        if let data = try? JSONEncoder().encode(project) { try? data.write(to: Groove.lastSessionURL, options: .atomic) }
     }
 
     func trackName(_ i: Int) -> String {

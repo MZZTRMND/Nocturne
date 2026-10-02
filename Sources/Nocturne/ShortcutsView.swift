@@ -5,6 +5,8 @@ struct ShortcutsView: View {
     private let shortcuts: [(keys: [String], action: String)] = [
         (["Space"], "Play / Stop"),
         (["⌘", "R"], "Record / stop recording"),
+        (["⌘", "S"], "Save project"),
+        (["⌘", "O"], "Open project"),
         (["⇧", "⌘", "M"], "Mute / unmute all"),
         (["⌘", "1"], "Trip-Hop"),
         (["⌘", "2"], "Industrial"),
@@ -54,6 +56,12 @@ struct ShortcutsView: View {
                 Text("Plays C4 – E5 with the current keys sound.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            section("Step editor") {
+                Text("In manual mode the keyboard panel has Drums and Bass tabs: click steps to write your own beat and bass line, bar by bar. Click a chord name above to swap it — the bass follows. Your edits stay when you change other parts.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             section("Prompt & manual mode") {

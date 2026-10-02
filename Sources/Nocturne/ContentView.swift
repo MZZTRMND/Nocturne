@@ -227,9 +227,33 @@ private struct ProgressionPanel: View {
             ForEach(0..<4, id: \.self) { b in
                 let isCurrentBar = groove.isPlaying && groove.bar == b
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(p.chordNames[b])
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(isCurrentBar ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    if groove.manual {
+                        // Click a chord to swap it for another in the key.
+                        Menu {
+                            ForEach(Pattern.chordChoices.indices, id: \.self) { i in
+                                let c = Pattern.chordChoices[i]
+                                Button(Pattern.voice(keyRoot: p.keyRoot, root: c.root, c.quality).name) {
+                                    groove.edit { $0.setChord(bar: b, root: c.root, c.quality) }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text(p.chordNames[b])
+                                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(isCurrentBar ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Change bar \(b + 1)'s chord")
+                    } else {
+                        Text(p.chordNames[b])
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(isCurrentBar ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    }
                     HStack(spacing: 0) {
                         ForEach(0..<16, id: \.self) { s in
                             let hit = p.kick[b][s] > 0.5 || p.snare[b][s] > 0.5
