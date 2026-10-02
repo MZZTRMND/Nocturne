@@ -58,24 +58,7 @@ struct ContentView: View {
             .sharedBackgroundVisibility(.hidden)
             // Without the system title nothing pushes the buttons right; this does.
             ToolbarSpacer(.flexible)
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Picker("Style", selection: $groove.style) {
-                        ForEach(Style.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "music.note.list")
-                        Text(groove.style.title)
-                    }
-                }
-                .menuIndicator(.hidden)
-                .help("Style preset: \(groove.style.title)")
-                .accessibilityLabel("Style preset, \(groove.style.title)")
-            }
-            ToolbarSpacer(.fixed)
-            // Manual sits on its own, apart from the Mute All + shortcuts pair.
+            // Manual sits on its own, apart from the Mute All · Presets · Shortcuts group.
             ToolbarItem(placement: .primaryAction) {
                 Toggle(isOn: $groove.manual) {
                     Label("Manual", systemImage: "dial.medium")
@@ -95,6 +78,20 @@ struct ContentView: View {
                 .keyboardShortcut("m", modifiers: [.command, .shift])
                 .help(groove.muteAll ? "Unmute all (⇧⌘M)" : "Mute all (⇧⌘M)")
                 .accessibilityLabel(groove.muteAll ? "Unmute all" : "Mute all")
+                Menu {
+                    Picker("Style", selection: $groove.style) {
+                        ForEach(Style.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.note.list")
+                        Text(groove.style.title)
+                    }
+                }
+                .menuIndicator(.hidden)
+                .help("Style preset: \(groove.style.title)")
+                .accessibilityLabel("Style preset, \(groove.style.title)")
                 Button {
                     showShortcuts.toggle()
                 } label: {
