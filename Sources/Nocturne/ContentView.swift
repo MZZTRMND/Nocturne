@@ -57,12 +57,17 @@ struct ContentView: View {
             .sharedBackgroundVisibility(.hidden)
             // Without the system title nothing pushes the buttons right; this does.
             ToolbarSpacer(.flexible)
-            ToolbarItemGroup(placement: .primaryAction) {
+            // Manual sits on its own, apart from the Mute All + shortcuts pair.
+            ToolbarItem(placement: .primaryAction) {
                 Toggle(isOn: $groove.manual) {
                     Label("Manual", systemImage: "dial.medium")
                 }
-                .labelStyle(.titleAndIcon)
-                .help(groove.manual ? "Back to the style preset" : "Manual mode: set every part by hand or with a prompt")
+                .labelStyle(.iconOnly)
+                .help(groove.manual ? "Manual mode on — click to go back to the style preset"
+                                    : "Manual mode: set every part by hand or with a prompt")
+            }
+            ToolbarSpacer(.fixed)
+            ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     groove.muteAll.toggle()
                 } label: {
