@@ -19,13 +19,13 @@ struct GrooveSpec {
     var drumKit: String
     @Guide(description: "Whether a deep sub bass plays under everything")
     var sub: Bool
-    @Guide(description: "Bass line sound", .anyOf(["driven", "grind", "pluck", "pulse", "drone", "reese", "none"]))
+    @Guide(description: "Bass line sound", .anyOf(["driven", "grind", "pluck", "pulse", "drone", "deep", "none"]))
     var bassSound: String
-    @Guide(description: "Bass line pattern", .anyOf(["riff", "rolling", "arpeggio", "sixteenths", "held", "two-step"]))
+    @Guide(description: "Bass line pattern", .anyOf(["riff", "rolling", "arpeggio", "sixteenths", "held", "roller"]))
     var bassPattern: String
-    @Guide(description: "Keys sound", .anyOf(["rhodes", "dark pad", "warm pad", "felt piano", "eerie pad", "strings", "none"]))
+    @Guide(description: "Keys sound", .anyOf(["rhodes", "dark pad", "warm pad", "felt piano", "eerie pad", "jazz keys", "none"]))
     var keys: String
-    @Guide(description: "Background texture", .anyOf(["vinyl haze", "drone", "tape", "static", "wind", "rain", "none"]))
+    @Guide(description: "Background texture", .anyOf(["vinyl haze", "drone", "tape", "static", "wind", "dust", "none"]))
     var texture: String
     @Guide(description: "0 is bright and open, 10 is pitch dark", .range(0...10))
     var darkness: Int
@@ -74,8 +74,8 @@ struct AppleInterpreter: PromptInterpreter {
     - Trent Reznor and Atticus Ross scores, cinematic: half-time, glitch kit, pulse sixteenths, felt piano, static, harmony cold.
     - S.T.A.L.K.E.R., MoozE, dark ambient, post-apocalyptic, Chernobyl: drift drums, metal kit, drone bass held, \
     eerie pad, wind texture, harmony desolate, about 60 to 70 BPM, lots of space, little distortion.
-    - LTJ Bukem, Goldie, Roni Size, 90s drum and bass, jungle, liquid: jungle drums, amen kit, reese bass two-step, \
-    strings keys, rain texture, harmony liquid, 165 to 175 BPM, medium space.
+    - LTJ Bukem, Atlantis, Good Looking, 90s drum and bass, jungle, liquid: jungle drums, amen kit, deep bass roller, \
+    jazz keys, dust texture, harmony liquid, 160 to 170 BPM, medium space, little distortion.
     - "Darker" means higher darkness and the dark minor or menace harmony; "slower" or "low tempo" means a lower BPM.
 
     Intros: each bar lasts 240 / BPM seconds. When asked for the start or first seconds of a track, \
@@ -138,8 +138,8 @@ struct ArtistReference {
                         bassSound: "pluck", bassPattern: "arpeggio", keys: "warm pad", texture: "tape"),
         ArtistReference(names: ["stalker", "s.t.a.l.k.e.r", "mooze", "radwind", "chernobyl", "dark ambient"], drums: "drift", drumKit: "metal",
                         bassSound: "drone", bassPattern: "held", keys: "eerie pad", texture: "wind"),
-        ArtistReference(names: ["ltj bukem", "bukem", "goldie", "roni size", "drum and bass", "drum & bass", "drum n bass", "d&b", "dnb", "jungle"],
-                        drums: "jungle", drumKit: "amen", bassSound: "reese", bassPattern: "two-step", keys: "strings", texture: "rain"),
+        ArtistReference(names: ["ltj bukem", "bukem", "atlantis", "good looking", "goldie", "roni size", "drum and bass", "drum & bass", "drum n bass", "d&b", "dnb", "jungle"],
+                        drums: "jungle", drumKit: "amen", bassSound: "deep", bassPattern: "roller", keys: "jazz keys", texture: "dust"),
         ArtistReference(names: ["reznor", "atticus", "social network"], drums: "half-time", drumKit: "glitch",
                         bassSound: "pulse", bassPattern: "sixteenths", keys: "felt piano", texture: "static"),
     ]
@@ -174,10 +174,10 @@ extension GrooveSpec {
             .firstIndex(of: drums).flatMap { DrumGroove(rawValue: $0) }
         r.kit = style(drumKit, ["dusty", "industrial", "soft", "glitch", "metal", "amen"]) ?? harmonyStyle
         r.sub = sub
-        r.bassSound = style(bassSound, ["driven", "grind", "pluck", "pulse", "drone", "reese"])
-        r.bassPattern = style(bassPattern, ["riff", "rolling", "arpeggio", "sixteenths", "held", "two-step"]) ?? harmonyStyle
-        r.keys = style(self.keys, ["rhodes", "dark pad", "warm pad", "felt piano", "eerie pad", "strings"])
-        r.texture = style(texture, ["vinyl haze", "drone", "tape", "static", "wind", "rain"])
+        r.bassSound = style(bassSound, ["driven", "grind", "pluck", "pulse", "drone", "deep"])
+        r.bassPattern = style(bassPattern, ["riff", "rolling", "arpeggio", "sixteenths", "held", "roller"]) ?? harmonyStyle
+        r.keys = style(self.keys, ["rhodes", "dark pad", "warm pad", "felt piano", "eerie pad", "jazz keys"])
+        r.texture = style(texture, ["vinyl haze", "drone", "tape", "static", "wind", "dust"])
         let bar = { (b: Int) in min(max(b - 1, 0), 7) }
         var enter = [bar(drumsEnter), bar(bassEnter), bar(bassEnter), bar(keysEnter), bar(textureEnter)]
         // Something always plays from bar 1: shift the whole build so the first part starts there.

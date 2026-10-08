@@ -31,7 +31,7 @@ enum Style: Int, CaseIterable, Identifiable, Codable {
         case .dreamy: Defaults(bpm: 104, swing: 0.12, tone: 0.55, grit: 0.12, space: 0.65)
         case .synth: Defaults(bpm: 96, swing: 0, tone: 0.5, grit: 0.35, space: 0.5)
         case .ambient: Defaults(bpm: 64, swing: 0, tone: 0.45, grit: 0.15, space: 0.85)
-        case .dnb: Defaults(bpm: 172, swing: 0.05, tone: 0.6, grit: 0.2, space: 0.5)
+        case .dnb: Defaults(bpm: 164, swing: 0, tone: 0.65, grit: 0.12, space: 0.5)
         }
     }
 
@@ -42,7 +42,7 @@ enum Style: Int, CaseIterable, Identifiable, Codable {
         case .dreamy: ["Drums", "Sub", "Arp", "Pad", "Tape"]
         case .synth: ["Drums", "Drone", "Pulse", "Piano", "Static"]
         case .ambient: ["Metal", "Drone", "Low", "Pad", "Wind"]
-        case .dnb: ["Break", "Sub", "Reese", "Strings", "Rain"]
+        case .dnb: ["Break", "Sub", "Bass", "Keys", "Dust"]
         }
     }
 }
@@ -112,12 +112,11 @@ private func progressions(_ style: Style) -> [[(Int, Quality)]] {
         [(0, .five), (8, .maj7), (3, .maj7), (10, .five)],
         [(0, .m7), (5, .m7), (8, .maj7), (7, .five)],
     ]
-    // 90s atmospheric jungle: jazzy minor ninths drifting to major sevenths and back.
+    // Atlantis-like: jazzy ninths that sit on one change and rock back and forth.
     case .dnb: [
-        [(0, .m9), (0, .m9), (10, .dom9), (8, .maj9)],
-        [(0, .m9), (5, .m9), (8, .maj9), (7, .m7)],
-        [(0, .m11), (3, .maj9), (5, .m9), (10, .dom13)],
-        [(0, .m9), (8, .maj7), (3, .maj9), (10, .dom9)],
+        [(0, .m9), (0, .m9), (5, .m9), (5, .m9)],
+        [(0, .m9), (0, .m9), (8, .maj9), (8, .maj9)],
+        [(0, .m11), (3, .maj9), (0, .m11), (3, .maj9)],
     ]
     case .dreamy: [
         [(0, .m9), (8, .maj9), (3, .maj7), (10, .dom9)],
@@ -415,58 +414,63 @@ struct Pattern: Codable, Equatable {
         snare[3][14] = 0.8
     }
 
-    /// 90s drum & bass in the LTJ Bukem / Goldie vein: a chopped Amen-style break with
-    /// ghost snares and a fill, a sub that follows the two-step kick, a reese bass rolling
-    /// under it and long string chords with the odd high note.
+    /// 90s atmospheric drum & bass after LTJ Bukem's "Atlantis": a rolling break under
+    /// constant 16th hats, a deep, round bass walking around the root, syncopated
+    /// electric-piano stabs and a short two-bar hook on top.
     private mutating func writeDnB(_ r: inout RNG) {
-        // Kick, main snares and ghosts per break; the last bar chops into a fill.
+        // Kick and ghost snares per break; the fourth bar ends on a light pickup.
         let breaks: [(kick: [Int], ghost: [Int])] = [
-            ([0, 10], [7, 9, 14]),                 // two-step
-            ([0, 2, 10, 11], [7, 9, 15]),          // Amen
-            ([0, 10, 13], [6, 9, 11]),
-            ([0, 3, 10], [7, 14, 15]),
+            ([0, 10], [7, 9, 14]),
+            ([0, 2, 10], [7, 15]),
+            ([0, 10, 11], [6, 9, 14]),
         ]
         let main = r.pick(breaks), alt = r.pick(breaks)
-        let fills = [[12, 13, 14, 15], [11, 12, 14, 15], [10, 12, 13, 15]]
-        let fill = r.pick(fills)
-        let openOn = r.chance(0.5) ? r.pick([6, 14]) : -1
 
-        // The reese line: the root through each half of the bar, moving on the second
-        // kick to the octave, fifth or ♭7.
+        // The bass rolls around the root: fifth, octave and ♭7 between the kicks.
         let riffs: [[(step: Int, len: Int, iv: Int)]] = [
-            [(0, 10, 0), (10, 6, 0)],
-            [(0, 8, 0), (10, 4, 7), (14, 2, 5)],
-            [(0, 6, 0), (6, 4, 12), (10, 6, 10)],
-            [(0, 10, 0), (10, 3, 3), (13, 3, 5)],
+            [(0, 6, 0), (6, 2, 7), (10, 4, 0), (14, 2, 10)],
+            [(0, 4, 0), (6, 2, 0), (8, 2, 12), (10, 6, 7)],
+            [(0, 6, 0), (7, 3, 3), (10, 4, 5), (14, 2, 7)],
         ]
         let riff = r.pick(riffs)
 
+        // Chord stabs: on the one, then pushed ahead of the beat.
+        let stabs = r.pick([[(0, 3), (6, 2), (10, 3)], [(0, 4), (7, 2), (12, 3)], [(0, 3), (3, 2), (10, 4)]])
+
+        // A two-bar hook in chord tones (index into the sorted chord), answered in bars 3-4.
+        let hooks: [[(step: Int, len: Int, idx: Int)]] = [
+            [(2, 2, 3), (4, 4, 2), (12, 2, 3), (14, 6, 4)],
+            [(0, 3, 4), (3, 3, 3), (8, 6, 2)],
+            [(6, 2, 2), (8, 2, 3), (10, 6, 4)],
+        ]
+        let hook = r.pick(hooks)
+
         for bar in 0..<4 {
-            let b = bar % 2 == 1 && r.chance(0.5) ? alt : main
+            let b = bar % 2 == 1 ? alt : main
             for s in b.kick { kick[bar][s] = s == 0 || s == 10 ? 1 : 0.7 }
             snare[bar][4] = 1
             snare[bar][12] = 1
-            for s in b.ghost { snare[bar][s] = 0.25 + 0.2 * r.float() }
-            for s in stride(from: 0, to: 16, by: 2) { hat[bar][s] = s % 4 == 2 ? 0.45 : 0.3 }
-            for s in stride(from: 1, to: 16, by: 2) { if r.chance(0.35) { hat[bar][s] = 0.15 } }
-            if openOn >= 0 { hat[bar][openOn] = 0; open[bar][openOn] = 0.3 }
-            if bar == 0 { perc[bar][0] = 0.35 }
+            for s in b.ghost { snare[bar][s] = 0.18 + 0.12 * r.float() }
+            for s in 0..<16 { hat[bar][s] = s % 4 == 2 ? 0.42 : s % 2 == 0 ? 0.3 : 0.17 }
+            if r.chance(0.4) { perc[bar][r.pick([7, 13])] = 0.3 }
 
             let root = bassRoots[bar]
             bass[bar][0] = Hit(len: 9, vel: 1, midi: root)
-            bass[bar][10] = Hit(len: 6, vel: 0.9, midi: root)
+            bass[bar][10] = Hit(len: 6, vel: 0.85, midi: root)
             for n in riff {
                 line[bar][n.step] = Hit(len: n.len, vel: n.step == 0 ? 0.95 : 0.8, midi: root + 12 + n.iv)
             }
 
-            comp[bar][0] = Hit(len: 16, vel: 0.5)
-            if r.chance(0.45) {
+            for (s, len) in stabs { comp[bar][s] = Hit(len: len, vel: s == 0 ? 0.6 : 0.45) }
+            if bar % 2 == 0 {
                 let notes = chords[bar].sorted()
-                melody[bar][r.pick([6, 8, 11])] = Hit(len: 8, vel: 0.35, midi: notes[Int(r.next() % UInt64(notes.count))] + 12)
+                for n in hook {
+                    melody[bar][n.step] = Hit(len: n.len, vel: 0.5, midi: notes[n.idx % notes.count] + 12)
+                }
             }
         }
-        for s in 10..<16 { snare[3][s] = 0 }
-        for (i, s) in fill.enumerated() { snare[3][s] = 0.5 + 0.15 * Float(i) }
+        snare[3][14] = 0.4
+        snare[3][15] = 0.55
     }
 
     /// Dark ambient in the S.T.A.L.K.E.R. / MoozE vein: no beat, just distant thuds,

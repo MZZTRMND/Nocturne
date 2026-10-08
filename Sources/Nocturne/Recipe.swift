@@ -51,8 +51,8 @@ let noteNames = ["C", "D♭", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "
 extension Style {
     var harmonyTitle: String { ["Dark minor", "Menace", "Dreamy", "Cold", "Desolate", "Liquid"][rawValue] }
     var kitTitle: String { ["Dusty", "Industrial", "Soft", "Glitch", "Metal", "Amen"][rawValue] }
-    var bassSoundTitle: String { ["Driven", "Grind", "Pluck", "Pulse", "Drone", "Reese"][rawValue] }
-    var bassPatternTitle: String { ["Riff", "Rolling", "Arpeggio", "Sixteenths", "Held", "Two-step"][rawValue] }
-    var keysTitle: String { ["Rhodes", "Dark pad", "Warm pad", "Felt piano", "Eerie pad", "Strings"][rawValue] }
-    var textureTitle: String { ["Vinyl haze", "Drone", "Tape", "Static", "Wind", "Rain"][rawValue] }
+    var bassSoundTitle: String { ["Driven", "Grind", "Pluck", "Pulse", "Drone", "Deep"][rawValue] }
+    var bassPatternTitle: String { ["Riff", "Rolling", "Arpeggio", "Sixteenths", "Held", "Roller"][rawValue] }
+    var keysTitle: String { ["Rhodes", "Dark pad", "Warm pad", "Felt piano", "Eerie pad", "Jazz keys"][rawValue] }
+    var textureTitle: String { ["Vinyl haze", "Drone", "Tape", "Static", "Wind", "Dust"][rawValue] }
 }

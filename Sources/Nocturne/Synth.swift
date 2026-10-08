@@ -67,7 +67,7 @@ struct Kick {
         case .dreamy: out = tanhf(body * 1.8) * 0.85 + click * 0.3     // round, soft beater
         case .synth: out = tanhf(body * 1.5) * 0.8 + click * 0.2     // muffled, felt-covered
         case .ambient: out = tanhf(body * 1.2) * 0.6                    // a far-off thud, no beater
-        case .dnb: out = tanhf(body * 2) * 0.85 + click * 0.7         // short and tight, out of the reese's way
+        case .dnb: out = tanhf(body * 2) * 0.85 + click * 0.7         // short and tight, out of the bass's way
         }
         t += dt
         return out * vel
@@ -193,7 +193,7 @@ struct Bass {
 /// plucked arpeggio (dreamy). A note that arrives while the previous one is still held
 /// slides into it without restarting the filter envelope.
 struct LineBass {
-    var ph: Float = 0, ph2: Float = 0, f: Float = 110, target: Float = 110
+    var ph: Float = 0, f: Float = 110, target: Float = 110
     var env: Float = 0, gate = 0, vel: Float = 0, t: Float = 10, accent = false, lp = SVF()
 
     mutating func trigger(_ freq: Float, samples: Int, vel: Float) {
@@ -224,10 +224,9 @@ struct LineBass {
         case .ambient:  // low drone that swells in, its filter breathing slowly
             lp.set(150 + 250 * (0.5 + 0.5 * sinf(t * 0.6)), k: 0.5, sr: sr)
             out = lp.tick(2 * ph - 1).lp * 0.8 * min(1, t / 1.5)
-        case .dnb:      // reese: two detuned saws phasing against each other, lowpassed and driven
-            ph2 += f * 1.011 * pitch * dt; wrap(&ph2)
-            lp.set(260 + 420 * (0.5 + 0.5 * sinf(t * 2.2)), k: 0.55, sr: sr)
-            out = tanhf(lp.tick(ph + ph2 - 1).lp * 2.2) * 0.55
+        case .dnb:      // deep, round bass: mostly sine, a touch of saw for the attack
+            lp.set(250 + 500 * expf(-t * 8), k: 0.8, sr: sr)
+            out = tanhf(lp.tick(0.75 * sinf(twoPi * ph) + 0.25 * (2 * ph - 1)).lp * 1.6) * 0.6
         case .synth:    // staccato analog pulse: saw + square through a resonant lowpass
             lp.set(300 + 1500 * expf(-t * 12), k: 0.35, sr: sr)
             out = tanhf(lp.tick(0.5 * (2 * ph - 1) + 0.5 * (ph < 0.5 ? 1 : -1)).lp * 1.8) * 0.45
@@ -246,7 +245,7 @@ struct Key {
 
     mutating func next(_ s: Style, _ dt: Float, pitch: Float = 1) -> Float {
         let relEnv: Float
-        if gate > 0 { gate -= 1; relEnv = 1 } else { rt += dt; relEnv = expf(-rt * [7, 2.5, 1.6, 4, 1, 1.4][s.rawValue]) }
+        if gate > 0 { gate -= 1; relEnv = 1 } else { rt += dt; relEnv = expf(-rt * [7, 2.5, 1.6, 4, 1, 6][s.rawValue]) }
         let amp, out: Float
         switch s {
         case .industrial:   // slow detuned saw pad with a sub-octave sine
@@ -266,11 +265,12 @@ struct Key {
             wrap(&pc); wrap(&pm); wrap(&p2)
             amp = min(1, t / (attack * 2))
             out = (sinf(twoPi * pc) + sinf(twoPi * pm)) * 0.5 + sinf(twoPi * p2) * 0.15 * expf(-t * 0.5)
-        case .dnb:      // lush strings: three detuned saws swelling in
-            pc += f * 1.004 * dt; pm += f * 0.996 * dt; p2 += f * 2.002 * dt
+        case .dnb:      // jazzy electric piano: FM tine with a quick bell on the attack
+            pc += f * dt; pm += f * dt; p2 += f * 14 * dt
             wrap(&pc); wrap(&pm); wrap(&p2)
-            amp = min(1, t / attack)
-            out = ((2 * pc - 1) + (2 * pm - 1)) * 0.35 + (2 * p2 - 1) * 0.15
+            let idx = 1.2 * expf(-t * 6) + 0.15
+            out = sinf(twoPi * pc + idx * sinf(twoPi * pm)) + sinf(twoPi * p2) * 0.12 * expf(-t * 30)
+            amp = min(1, t / 0.003) * expf(-t * 0.9)
         case .synth:    // felt piano: three partials, the upper ones dying away first
             pc += f * dt; p2 += 2 * f * dt; pm += 3 * f * dt
             wrap(&pc); wrap(&p2); wrap(&pm)
@@ -285,7 +285,7 @@ struct Key {
         }
         t += dt
         let a = amp * relEnv * vel
-        if relEnv < 0.0005 || ((s == .tripHop || s == .synth) && t > 0.1 && a < 0.00005) { on = false }
+        if relEnv < 0.0005 || ((s == .tripHop || s == .synth || s == .dnb) && t > 0.1 && a < 0.00005) { on = false }
         return out * a
     }
 }
@@ -418,7 +418,7 @@ final class Synth {
         case .dreamy: keysL.set(1100 + 700 * sweep, k: 0.8, sr: sr)
         case .synth: keysL.set(2400, k: 0.9, sr: sr)
         case .ambient: keysL.set(900 + 600 * sweep, k: 0.6, sr: sr)
-        case .dnb: keysL.set(1200 + 1400 * sweep, k: 0.7, sr: sr)
+        case .dnb: keysL.set(2600, k: 0.9, sr: sr)
         }
         keysR.g = keysL.g; keysR.k = keysL.k
         droneBP.set(220 + 900 * sweep, k: 0.15, sr: sr)
@@ -473,12 +473,12 @@ final class Synth {
             }
             kL = keysL.tick(kL).lp
             kR = keysR.tick(kR).lp
-            if keysS == .tripHop {
+            if keysS == .tripHop || keysS == .dnb {     // stereo tremolo, like a Rhodes
                 let tr = sinf(twoPi * lfoTrem)
                 kL *= 1 - 0.25 * (0.5 + 0.5 * tr)
                 kR *= 1 - 0.25 * (0.5 - 0.5 * tr)
             }
-            let kScale: Float = [2.9, 1, 2.8, 3.2, 4.0, 3.8][keysS.rawValue]
+            let kScale: Float = [2.9, 1, 2.8, 3.2, 4.0, 2.9][keysS.rawValue]
             kL *= smoothGains[3] * duck * kScale
             kR *= smoothGains[3] * duck * kScale
 
@@ -507,11 +507,10 @@ final class Synth {
                 droneF += (droneTarget - droneF) * 0.0005
                 dronePh += droneF * dt; wrap(&dronePh)
                 tx = wind + geigerClick + rumbleLP.tick(2 * dronePh - 1).lp * 0.08
-            case .dnb:      // rain: soft hiss, scattered droplets and a slow, airy swell
-                if noise.next() > 0.9985 { crackle = 0.08 + 0.12 * noise.next() }
-                crackle *= 0.75
-                tx = hissLP.tick(noise.next()).lp * 0.03 + airBP.tick(noise.next()).bp * 0.03 * sweep
-                    + crackle * noise.next()
+            case .dnb:      // dust: dry vinyl crackle over a faint hiss, no drone
+                if noise.next() > 0.9993 { crackle = 0.2 + 0.25 * noise.next() }
+                crackle *= 0.55
+                tx = crackle * noise.next() + hissLP.tick(noise.next()).lp * 0.015
             case .dreamy:   // tape hiss with a little air on top
                 tx = hissLP.tick(noise.next()).lp * 0.025 + airBP.tick(noise.next()).bp * 0.02
             case .tripHop:  // vinyl crackle over a low, slowly breathing drone on the root
@@ -523,7 +522,7 @@ final class Synth {
                 tx = crackle * noise.next() + hissLP.tick(noise.next()).lp * 0.02 + drone
             }
             texGain += (texTarget - texGain) * 0.0005      // texture fades in when it enters
-            tx *= smoothGains[4] * [1, 1, 1, 0.5, 1.8, 2.4][texS.rawValue] * texGain
+            tx *= smoothGains[4] * [1, 1, 1, 0.5, 1.8, 6][texS.rawValue] * texGain
 
             lfoSlow += 0.06 * dt; wrap(&lfoSlow)
             lfoTrem += 4.2 * dt; wrap(&lfoTrem)
