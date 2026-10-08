@@ -8,6 +8,7 @@ extension Style {
         case .dreamy: Color(red: 0.25, green: 0.6, blue: 1.0)
         case .synth: Color(red: 0.35, green: 0.85, blue: 0.72)
         case .ambient: Color(red: 0.78, green: 0.86, blue: 0.3)     // radioactive yellow-green
+        case .dnb: Color(red: 0.72, green: 0.48, blue: 1.0)         // rave violet
         }
     }
 }
@@ -288,9 +289,9 @@ private struct KnobPanel: View {
         Grid(horizontalSpacing: 6, verticalSpacing: 18) {
             GridRow {
                 Knob(title: "Tempo",
-                     value: Binding(get: { (groove.bpm - 60) / 100 }, set: { groove.bpm = 60 + $0 * 100 }),
+                     value: Binding(get: { (groove.bpm - 60) / 120 }, set: { groove.bpm = 60 + $0 * 120 }),
                      display: "\(Int(groove.bpm.rounded())) bpm",
-                     defaultValue: (groove.style.defaults.bpm - 60) / 100)
+                     defaultValue: (groove.style.defaults.bpm - 60) / 120)
                 Knob(title: "Swing", value: $groove.swing,
                      display: percent(groove.swing), defaultValue: groove.style.defaults.swing)
                 Knob(title: "Tone", value: $groove.tone,
